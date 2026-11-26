@@ -6,7 +6,7 @@
 const PROJECT = 'demo-opgavebanken'
 const BASE = `http://${process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080'}/v1/projects/${PROJECT}/databases/(default)/documents`
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url')
-const token = (uid) => `${b64({ alg: 'none' })}.${b64({ sub: uid, user_id: uid, email: `${uid}@skole.dk`, email_verified: !uid.startsWith('U'), aud: PROJECT, iss: `https://securetoken.google.com/${PROJECT}`, iat: 0, exp: 9999999999, auth_time: 0, firebase: { sign_in_provider: 'password' } })}.`
+const token = (uid) => `${b64({ alg: 'none' })}.${b64({ sub: uid, user_id: uid, email: uid === 'ADMIN' ? 'simonberthelsen@hotmail.com' : `${uid}@skole.dk`, email_verified: !uid.startsWith('U'), aud: PROJECT, iss: `https://securetoken.google.com/${PROJECT}`, iat: 0, exp: 9999999999, auth_time: 0, firebase: { sign_in_provider: 'password' } })}.`
 
 const v = (x) => {
   if (x === null) return { nullValue: null }
@@ -19,7 +19,8 @@ const v = (x) => {
 const doc = (o) => ({ fields: Object.fromEntries(Object.entries(o).map(([k, y]) => [k, v(y)])) })
 
 async function req(method, path, uid, body, query = '') {
-  const res = await fetch(`${BASE}/${path}${query}`, {
+  const url = path.startsWith(':') ? `${BASE}${path}` : `${BASE}/${path}${query}`
+  const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json', ...(uid ? { Authorization: `Bearer ${token(uid)}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -57,6 +58,16 @@ expect('Ugyldig opgave (klassetrin 12) afvises', await req('PATCH', 'tasks/t2', 
 expect('Ugyldigt område afvises', await req('PATCH', 'tasks/t3', 'A', doc({ ...task, ownerUid: 'A', area: 'Kemi' })), false)
 expect('Lærer A kan slette sin egen opgave', await req('DELETE', 'tasks/t1', 'A'), true)
 expect('Gammel privat bank kan ikke få nye opgaver', await req('PATCH', 'users/A/tasks/x', 'A', doc(task)), false)
+expect('Lærer A gemmer sin profil', await req('PATCH', 'profiles/A', 'A', doc({ uid: 'A', email: 'A@skole.dk', loginCount: 1 })), true)
+expect('Profil med andens e-mail afvises', await req('PATCH', 'profiles/A', 'A', doc({ uid: 'A', email: 'chef@skole.dk' })), false)
+expect('Lærer B kan ikke læse A’s profil', await req('GET', 'profiles/A', 'B'), false)
+expect('Admin kan læse A’s profil', await req('GET', 'profiles/A', 'ADMIN'), true)
+expect('Lærer A registrerer eget login', await req('POST', 'logins', 'A', doc({ uid: 'A', email: 'A@skole.dk', at: 1, device: 'Chrome' })), true)
+expect('Lærer B kan ikke registrere login for A', await req('POST', 'logins', 'B', doc({ uid: 'A', email: 'A@skole.dk', at: 1, device: 'Chrome' })), false)
+expect('Lærere kan ikke læse login-loggen', await req('POST', ':runQuery', 'A', { structuredQuery: { from: [{ collectionId: 'logins' }] } }), false)
+expect('Admin kan læse login-loggen', await req('POST', ':runQuery', 'ADMIN', { structuredQuery: { from: [{ collectionId: 'logins' }] } }), true)
+expect('Lærer A gemmer opgave t5', await req('PATCH', 'tasks/t5', 'A', doc({ ...task, ownerUid: 'A' })), true)
+expect('Admin kan slette en lærers opgave', await req('DELETE', 'tasks/t5', 'ADMIN'), true)
 const set = { title: 'Sæt', createdAt: 1, totalPoints: 1, tasks: [task] }
 expect('Lærer A gemmer et sæt', await req('PATCH', 'users/A/sets/s1', 'A', doc(set)), true)
 expect('Sættets titel kan ændres', await req('PATCH', 'users/A/sets/s1', 'A', doc({ title: 'Nyt navn' }), '?updateMask.fieldPaths=title'), true)

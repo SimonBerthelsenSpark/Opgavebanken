@@ -16,6 +16,8 @@ const write = <T,>(v: T): T => {
   return clone(v)
 }
 const db = {
+  profiles: new Map<string, Record<string, unknown>>(),
+  logins: [] as Record<string, unknown>[],
   tasks: new Map<string, Task>(),
   sets: new Map<string, SavedSet>(),
   progression: null as Progression | null,
@@ -68,6 +70,7 @@ export async function deleteTask(_uid: string, key: string) {
 export async function saveSet(_uid: string, title: string, tasks: Task[]) {
   const key = id()
   db.sets.set(key, write({ id: key, title, createdAt: Date.now(), tasks: tasks.map(encodeTask), totalPoints: tasks.reduce((s, t) => s + taskPoints(t), 0) }))
+  bumpSets(_uid, 1)
   emit()
   return key
 }
@@ -89,7 +92,13 @@ export async function renameSet(_uid: string, key: string, title: string) {
 
 export async function deleteSet(_uid: string, key: string) {
   db.sets.delete(key)
+  bumpSets(_uid, -1)
   emit()
+}
+
+function bumpSets(uid: string, by: number) {
+  const p = db.profiles.get(uid) ?? {}
+  db.profiles.set(uid, { ...p, setCount: ((p.setCount as number) ?? 0) + by })
 }
 
 export function useProgression(_uid: string) {
@@ -115,4 +124,23 @@ export async function migratePrivateTasks(_uid: string) {
 ;(window as unknown as { __addForeignTask: (t: Task) => void }).__addForeignTask = (t: Task) => {
   db.tasks.set(t.id, write(encodeTask(t)))
   emit()
+}
+
+export type { LoginEntry, Profile } from './store'
+
+export async function recordLogin(user: { uid: string; email: string | null; displayName: string | null; emailVerified: boolean; providerData: { providerId: string }[] }) {
+  const p = db.profiles.get(user.uid) ?? {}
+  const now = Date.now()
+  db.profiles.set(user.uid, { ...p, uid: user.uid, email: user.email, name: user.displayName, provider: user.providerData[0]?.providerId ?? 'password', emailVerified: user.emailVerified, createdAt: (p.createdAt as number) ?? now, lastLoginAt: now, loginCount: ((p.loginCount as number) ?? 0) + 1 })
+  db.logins.unshift({ id: id(), uid: user.uid, email: user.email, at: now, device: 'Chrome på Linux' })
+  emit()
+}
+
+export function useProfiles() {
+  const profiles = useLive(() => [...db.profiles.values()].map(clone)) as never
+  return { profiles, error: null as string | null }
+}
+
+export function useLogins(_max = 100) {
+  return useLive(() => db.logins.map(clone)) as never
 }

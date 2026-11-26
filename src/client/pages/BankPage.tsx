@@ -6,7 +6,7 @@ import { DifficultyBadge, IssueList, TaskEditor, TaskView } from '../components'
 import { KEYS, type SetDraft, readSession, useSessionState, writeSession } from '../session'
 import { deleteTask, updateTask, useTasks } from '../store'
 
-export function BankPage({ uid }: { uid: string }) {
+export function BankPage({ uid, admin = false }: { uid: string; admin?: boolean }) {
   const { tasks, error } = useTasks(uid)
   const [filters, setFilters] = useSessionState<Filters>(KEYS.filters, EMPTY_FILTERS)
   const [selected, setSelected] = useSessionState<string[]>(KEYS.selection, [])
@@ -257,6 +257,7 @@ export function BankPage({ uid }: { uid: string }) {
                   }}
                   topics={topics}
                   mine={t.ownerUid === uid}
+                  admin={admin}
                 />
               ))}
             </tbody>
@@ -283,6 +284,7 @@ function BankRow(props: {
   onDelete: () => void
   topics: string[]
   mine: boolean
+  admin: boolean
 }) {
   const { task: t } = props
   const flagged = t.issues?.some((i) => i.level === 'error')
@@ -333,7 +335,14 @@ function BankRow(props: {
                     </button>
                   </div>
                 ) : (
-                  <p className="hint">Opgaven er lavet af en kollega. Du kan bruge den i dine sæt, men kun kollegaen kan rette eller slette den.</p>
+                  <div className="actions">
+                    <p className="hint">Opgaven er lavet af en kollega. Du kan bruge den i dine sæt, men kun kollegaen kan rette eller slette den.</p>
+                    {props.admin && (
+                      <button type="button" className="btn ghost sm danger" onClick={props.onDelete}>
+                        Slet (admin)
+                      </button>
+                    )}
+                  </div>
                 )}
               </>
             )}

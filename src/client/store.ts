@@ -5,6 +5,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -85,6 +87,8 @@ export async function saveSet(uid: string, title: string, tasks: Task[]): Promis
     setsCol(uid),
     clean({ title, createdAt: Date.now(), tasks: tasks.map(encodeTask), totalPoints: tasks.reduce((s, t) => s + taskPoints(t), 0) }),
   )
+  // the admin overview shows how many sets a teacher has, without reading the private sets
+  await setDoc(profileDoc(uid), { setCount: increment(1) }, { merge: true }).catch(() => undefined)
   return ref.id
 }
 
@@ -108,7 +112,10 @@ export async function loadSet(uid: string, id: string): Promise<SavedSet | null>
 }
 
 export const renameSet = (uid: string, id: string, title: string) => updateDoc(doc(setsCol(uid), id), { title })
-export const deleteSet = (uid: string, id: string) => deleteDoc(doc(setsCol(uid), id))
+export async function deleteSet(uid: string, id: string) {
+  await deleteDoc(doc(setsCol(uid), id))
+  await setDoc(profileDoc(uid), { setCount: increment(-1) }, { merge: true }).catch(() => undefined)
+}
 
 const progressionDoc = (uid: string) => doc(db, 'users', uid, 'meta', 'progression')
 
@@ -147,4 +154,92 @@ export async function migratePrivateTasks(uid: string): Promise<number> {
   }
   await batch.commit()
   return old.size
+}
+
+// ---- profiles and logins (for the admin overview)
+
+export interface Profile {
+  uid: string
+  email: string | null
+  name: string | null
+  provider: string
+  emailVerified: boolean
+  createdAt: number
+  lastLoginAt: number
+  loginCount: number
+  setCount?: number
+}
+
+export interface LoginEntry {
+  id: string
+  uid: string
+  email: string | null
+  at: number
+  device: string
+}
+
+const profileDoc = (uid: string) => doc(db, 'profiles', uid)
+
+function device(): string {
+  const ua = navigator.userAgent
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser'
+  const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : ''
+  return os ? `${browser} på ${os}` : browser
+}
+
+/** Records a login once per browser session: updates the profile and adds a login entry. */
+export async function recordLogin(user: {
+  uid: string
+  email: string | null
+  displayName: string | null
+  emailVerified: boolean
+  providerData: { providerId: string }[]
+  metadata: { creationTime?: string }
+}): Promise<void> {
+  const flag = `ob.login.${user.uid}`
+  if (sessionStorage.getItem(flag)) return
+  sessionStorage.setItem(flag, '1')
+  const now = Date.now()
+  await setDoc(
+    profileDoc(user.uid),
+    {
+      uid: user.uid,
+      email: user.email,
+      name: user.displayName,
+      provider: user.providerData[0]?.providerId ?? 'password',
+      emailVerified: user.emailVerified,
+      createdAt: user.metadata.creationTime ? Date.parse(user.metadata.creationTime) : now,
+      lastLoginAt: now,
+      loginCount: increment(1),
+    },
+    { merge: true },
+  )
+  await addDoc(collection(db, 'logins'), { uid: user.uid, email: user.email, at: now, device: device() })
+}
+
+export function useProfiles() {
+  const [profiles, setProfiles] = useState<Profile[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(
+    () =>
+      onSnapshot(
+        collection(db, 'profiles'),
+        (snap) => setProfiles(snap.docs.map((d) => d.data() as Profile)),
+        (e) => setError(e.message),
+      ),
+    [],
+  )
+  return { profiles, error }
+}
+
+export function useLogins(max = 100) {
+  const [logins, setLogins] = useState<LoginEntry[] | null>(null)
+  useEffect(
+    () =>
+      onSnapshot(query(collection(db, 'logins'), orderBy('at', 'desc'), limit(max)), (snap) =>
+        setLogins(snap.docs.map((d) => ({ ...(d.data() as Omit<LoginEntry, 'id'>), id: d.id }))),
+      ),
+    [max],
+  )
+  return logins
 }

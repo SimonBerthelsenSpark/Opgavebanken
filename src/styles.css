@@ -221,3 +221,8 @@ details summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); marg
 .login-card { width: 100%; max-width: 400px; }
 .login-links { display: flex; justify-content: space-between; margin-top: 16px; font-size: 14px; }
 .login-links .link { margin: 0; }
+
+/* admin */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat strong { font-size: 26px; font-weight: 600; line-height: 1.2; }

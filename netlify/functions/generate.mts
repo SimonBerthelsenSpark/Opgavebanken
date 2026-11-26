@@ -2,7 +2,7 @@ import type { Config } from '@netlify/functions'
 import { type GeneratedTask, generateRequestSchema } from '../../src/shared/domain'
 import { evaluateOutput } from './_lib/evaluate'
 import { requireUser } from './_lib/auth'
-import { guard } from './_lib/guard'
+import { bump, guard, usageKey } from './_lib/guard'
 import { handler, json } from './_lib/http'
 import { type Msg, structuredCall } from './_lib/openai'
 import { repairPrompt, tasksPrompt } from './_lib/prompts'
@@ -59,6 +59,7 @@ export default handler(async (req, body) => {
   const notices: string[] = []
   if (tasks.length < input.items.length)
     notices.push(`${input.items.length - tasks.length} af ${input.items.length} opgaver kunne ikke laves korrekt og er udeladt.`)
+  if (tasks.length) await bump(usageKey(user.uid), 'tasks', tasks.length).catch(() => undefined)
   return json({ tasks, notices, repaired })
 })
 

@@ -94,3 +94,10 @@ Gratis og uden internet-konti: Firebase-emulatorer + test-AI. Sæt i `.env`:
 - **AI-kald:** Kun fra serverfunktionerne. Login og bekræftet e-mail kontrolleres på serveren (Firebase ID-token verificeres mod Googles nøgler). Højst 20 opgaver pr. generering, 2 pr. kald, `AI_CALLS_PER_HOUR` (standard 60) pr. lærer og `AI_CALLS_PER_DAY_TOTAL` (standard 500) for alle tilsammen. Samme forespørgsel kan ikke sendes to gange.
 - **Når `firestore.rules` ændres**, skal reglerne publiceres igen i Firebase (trin 2.5). Netlify gør det ikke.
 - **Luk for nye konti:** Firebase → Authentication → Settings → **User actions** → slå *Enable create (sign-up)* fra, når de rigtige lærere er oprettet. Eller brug `ALLOWED_EMAILS`.
+
+## 7. Admin
+
+- Admin-menuen vises for e-mails i `ADMIN_EMAILS` i `src/shared/admin.ts` **og** i funktionen `isAdmin()` i `firestore.rules`. Ret begge steder, og publicér reglerne igen.
+- Admin kræver bekræftet e-mail. Siden viser brugere (oprettet, seneste login, antal logins, opgaver, sæt, AI-forbrug de sidste 7 dage), de seneste 100 logins og opgavebankens fordeling på klassetrin og område. Admin kan slette enhver opgave i banken.
+- Profiler og logins registreres fra første login efter opdateringen. Ældre brugere vises som "Ukendt", til de logger ind igen.
+- AI-forbruget gemmes i Netlify Blobs (store `ai-guard`) og hentes via `/api/admin-stats`.

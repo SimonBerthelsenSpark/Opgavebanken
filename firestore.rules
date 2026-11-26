@@ -19,6 +19,13 @@ service cloud.firestore {
         && t.parts is list && t.parts.size() >= 1 && t.parts.size() <= 6;
     }
 
+    // Keep in sync with ADMIN_EMAILS in src/shared/admin.ts
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['simonberthelsen@hotmail.com'];
+    }
+
     function verified() {
       return request.auth != null && request.auth.token.email_verified == true;
     }
@@ -32,7 +39,23 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid
         && validTask(request.resource.data);
-      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      allow delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // One profile per teacher (written by the teacher at login), readable by the teacher and admins.
+    match /profiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && (!('email' in request.resource.data) || request.resource.data.email == request.auth.token.email);
+    }
+
+    // Login log: a teacher can add their own entries; only admins can read it. Never changed.
+    match /logins/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'at', 'device']);
+      allow read: if isAdmin();
     }
 
     match /users/{uid} {

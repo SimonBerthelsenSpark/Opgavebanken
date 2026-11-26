@@ -1,7 +1,9 @@
 import { onAuthStateChanged, sendEmailVerification, signOut, type User } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { auth, firebaseConfigured } from './firebase'
-import { migratePrivateTasks } from './store'
+import { migratePrivateTasks, recordLogin } from './store'
+import { isAdminEmail } from '../shared/admin'
+import { AdminPage } from './pages/AdminPage'
 import { BankPage } from './pages/BankPage'
 import { GeneratePage } from './pages/GeneratePage'
 import { LoginPage } from './pages/LoginPage'
@@ -40,7 +42,10 @@ export function App() {
       onAuthStateChanged(auth, (u) => {
         setUser(u)
         // version 1 kept a private bank per teacher; move it into the shared bank once
-        if (u) migratePrivateTasks(u.uid).catch((e) => console.warn('Flytning af opgaver mislykkedes', e))
+        if (u) {
+          migratePrivateTasks(u.uid).catch((e) => console.warn('Flytning af opgaver mislykkedes', e))
+          recordLogin(u).catch((e) => console.warn('Login kunne ikke registreres', e))
+        }
       }),
     [],
   )
@@ -57,6 +62,8 @@ export function App() {
   if (!user) return <LoginPage />
 
   const uid = user.uid
+  const admin = isAdminEmail(user.email, import.meta.env.MODE === 'e2e' || import.meta.env.VITE_USE_EMULATORS === '1')
+  const tabs = admin ? [...TABS, { path: '/admin', label: 'Admin' }] : TABS
   let page: React.ReactNode
   let active = '/'
   if (path === '/generer') {
@@ -73,7 +80,10 @@ export function App() {
   } else if (path === '/progression') {
     page = <ProgressionPage uid={uid} />
     active = '/progression'
-  } else page = <BankPage uid={uid} />
+  } else if (path === '/admin' && admin) {
+    page = <AdminPage uid={uid} />
+    active = '/admin'
+  } else page = <BankPage uid={uid} admin={admin} />
 
   return (
     <>
@@ -90,7 +100,7 @@ export function App() {
             <span className="marking">Opgave</span>banken <small>fra AImforA</small>
           </a>
           <nav className="tabs" aria-label="Hovedmenu">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <a
                 key={t.path}
                 href={t.path}

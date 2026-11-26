@@ -45,3 +45,12 @@ export function generateChunk(args: {
 }) {
   return post<{ tasks: GeneratedTask[]; notices: string[]; repaired: boolean }>('/api/generate', args)
 }
+
+export async function adminStats(): Promise<import('../shared/admin').UsageStats> {
+  const user = auth.currentUser
+  if (!user) throw new ApiError('Du skal være logget ind.')
+  const res = await fetch('/api/admin-stats', { headers: { Authorization: `Bearer ${await user.getIdToken()}` } })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new ApiError(data.error ?? `Serverfejl (${res.status}).`)
+  return data
+}

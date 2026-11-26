@@ -4,10 +4,11 @@
  *   npx tsx --env-file=.env scripts/local-api.ts
  */
 import { createServer } from 'node:http'
+import adminStats from '../netlify/functions/admin-stats.mts'
 import generate from '../netlify/functions/generate.mts'
 import plan from '../netlify/functions/plan.mts'
 
-const routes: Record<string, (req: Request) => Promise<Response>> = { '/api/plan': plan, '/api/generate': generate }
+const routes: Record<string, (req: Request) => Promise<Response>> = { '/api/plan': plan, '/api/generate': generate, '/api/admin-stats': adminStats }
 
 createServer(async (req, res) => {
   const fn = routes[req.url?.split('?')[0] ?? '']
