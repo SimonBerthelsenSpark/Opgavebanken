@@ -17,7 +17,7 @@ export const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const
 /** Hard limit on tasks per generation (cost and time). */
 export const MAX_TASKS_PER_GENERATION = 20
 /** Tasks expanded per server call, so each call stays well inside the function time limit. */
-export const TASKS_PER_CHUNK = 3
+export const TASKS_PER_CHUNK = 2
 
 export const pointSchema = z.number().int().min(0).max(20)
 

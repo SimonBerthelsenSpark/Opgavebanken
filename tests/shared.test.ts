@@ -144,3 +144,14 @@ describe('mock pipeline', () => {
     expect(r.tasks.every((t) => t && t.verified.every(Boolean))).toBe(true)
   })
 })
+
+describe('Firestore codec', async () => {
+  const { decodeTask, encodeTask, hasNestedArray } = await import('../src/shared/codec')
+  it('stores figure points without nested arrays and reads them back', () => {
+    const t = task()
+    expect(hasNestedArray(t)).toBe(true) // what Firestore rejects
+    const stored = JSON.parse(JSON.stringify(encodeTask(t)))
+    expect(hasNestedArray(stored)).toBe(false)
+    expect(decodeTask(stored)).toEqual(t)
+  })
+})

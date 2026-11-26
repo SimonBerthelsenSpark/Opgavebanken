@@ -55,10 +55,13 @@ export function GeneratePage({ uid }: { uid: string }) {
   const inCatalog = (g: number, t: string) => Object.values(GRADE_TOPICS[g] ?? {}).some((ts) => ts.includes(t))
   const requestTopic = form.topic === 'custom' ? (form.custom ?? '').trim() : topicRequest(form.topic, form.grade)
 
-  async function writeTasks(items: PlanItem[], indexes: number[], grade: number) {
+  async function writeTasks(items: PlanItem[], indexes: number[], grade: number, retry = true) {
     setPhase('writing')
     const chunks: number[][] = []
-    for (let i = 0; i < indexes.length; i += TASKS_PER_CHUNK) chunks.push(indexes.slice(i, i + TASKS_PER_CHUNK))
+    // first attempt in pairs; a retry sends the missing tasks one at a time (shorter calls)
+    const size = retry ? TASKS_PER_CHUNK : 1
+    for (let i = 0; i < indexes.length; i += size) chunks.push(indexes.slice(i, i + size))
+    const missing: number[] = []
     const base = newRequestId()
     await Promise.all(
       chunks.map(async (idx, c) => {
@@ -71,6 +74,9 @@ export function GeneratePage({ uid }: { uid: string }) {
             progression: context,
             requestId: `${base}-${c}`,
           })
+          idx.forEach((slotIndex, k) => {
+            if (!res.tasks[k]) missing.push(slotIndex)
+          })
           setState((s) => {
             const slots = s.slots.slice()
             idx.forEach((slotIndex, k) => {
@@ -81,6 +87,7 @@ export function GeneratePage({ uid }: { uid: string }) {
           })
         } catch (e) {
           const message = e instanceof ApiError ? e.message : 'Ukendt fejl.'
+          missing.push(...idx)
           setState((s) => {
             const slots = s.slots.slice()
             for (const slotIndex of idx) slots[slotIndex] = { ...slots[slotIndex], failed: message }
@@ -89,6 +96,10 @@ export function GeneratePage({ uid }: { uid: string }) {
         }
       }),
     )
+    if (retry && missing.length) {
+      await writeTasks(items, missing, grade, false)
+      return
+    }
     setPhase('idle')
   }
 
@@ -154,8 +165,14 @@ export function GeneratePage({ uid }: { uid: string }) {
       writeSession('ob.flash', `${kept.length} ${kept.length === 1 ? 'opgave er' : 'opgaver er'} gemt i banken.`)
       setState(INITIAL)
       navigate('/')
-    } catch {
-      setError('Opgaverne kunne ikke gemmes. Tjek forbindelsen og prøv igen.')
+    } catch (e) {
+      console.error(e)
+      const code = (e as { code?: string }).code
+      setError(
+        code === 'permission-denied'
+          ? 'Databasen afviste opgaverne (Firestore-reglerne). Tjek at reglerne er publiceret.'
+          : `Opgaverne kunne ikke gemmes${code ? ` (${code})` : ''}. Prøv igen.`,
+      )
       setPhase('idle')
     } finally {
       busy.current = false

@@ -130,7 +130,7 @@ try {
   await waitText('Forhåndsvisning · 12 af 12 opgaver', 60000)
   const plans = api.filter((a) => a.startsWith('plan')).length
   const gens = api.filter((a) => a.startsWith('generate')).length
-  check('Dobbeltklik giver kun ét plan-kald', plans === 1, `plan=${plans}, generate=${gens} (bidder á 3)`)
+  check('Dobbeltklik giver kun ét plan-kald', plans === 1, `plan=${plans}, generate=${gens} (bidder á 2)`)
   const genInfo = await page.evaluate(() => ({
     items: document.querySelectorAll('.gen-item').length,
     titles: [...document.querySelectorAll('.gen-item h3')].map((h) => h.textContent),

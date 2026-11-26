@@ -7,8 +7,14 @@ import { useEffect, useState } from 'react'
 import { type SavedSet, type Task, type TaskContent, taskPoints } from '../shared/domain'
 import { DEFAULT_PROGRESSION, type Progression } from '../shared/progression'
 import { checkTask } from '../shared/validate'
+import { decodeTask, encodeTask, hasNestedArray } from '../shared/codec'
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
+/** Like Firestore: arrays directly inside arrays are rejected. */
+const write = <T,>(v: T): T => {
+  if (hasNestedArray(v)) throw new Error('Nested arrays are not supported (Firestore)')
+  return clone(v)
+}
 const db = {
   tasks: new Map<string, Task>(),
   sets: new Map<string, SavedSet>(),
@@ -34,7 +40,7 @@ function useLive<T>(read: () => T): T {
 }
 
 export function useTasks(_uid: string) {
-  const tasks = useLive(() => [...db.tasks.values()].map(clone).sort((a, b) => b.createdAt - a.createdAt))
+  const tasks = useLive(() => [...db.tasks.values()].map((t) => decodeTask(clone(t))).sort((a, b) => b.createdAt - a.createdAt))
   return { tasks, error: null as string | null }
 }
 
@@ -43,14 +49,14 @@ export async function saveNewTasks(_uid: string, items: (TaskContent & { editedB
   items.forEach((t, i) => {
     const { issues, verified } = checkTask(t)
     const key = id()
-    db.tasks.set(key, clone({ ...(t as Task), id: key, issues, verified, source: 'ai', editedByTeacher: Boolean(t.editedByTeacher), createdAt: now + (items.length - i), updatedAt: now }))
+    db.tasks.set(key, write({ ...encodeTask(t as Task), id: key, issues, verified, source: 'ai', editedByTeacher: Boolean(t.editedByTeacher), createdAt: now + (items.length - i), updatedAt: now }))
   })
   emit()
 }
 
 export async function updateTask(_uid: string, task: Task) {
   const { issues, verified } = checkTask(task)
-  db.tasks.set(task.id, clone({ ...task, issues, verified, editedByTeacher: true, updatedAt: Date.now() }))
+  db.tasks.set(task.id, write({ ...encodeTask(task), issues, verified, editedByTeacher: true, updatedAt: Date.now() }))
   emit()
 }
 
@@ -61,18 +67,18 @@ export async function deleteTask(_uid: string, key: string) {
 
 export async function saveSet(_uid: string, title: string, tasks: Task[]) {
   const key = id()
-  db.sets.set(key, clone({ id: key, title, createdAt: Date.now(), tasks, totalPoints: tasks.reduce((s, t) => s + taskPoints(t), 0) }))
+  db.sets.set(key, write({ id: key, title, createdAt: Date.now(), tasks: tasks.map(encodeTask), totalPoints: tasks.reduce((s, t) => s + taskPoints(t), 0) }))
   emit()
   return key
 }
 
 export function useSets(_uid: string) {
-  return useLive(() => [...db.sets.values()].map(clone).sort((a, b) => b.createdAt - a.createdAt))
+  return useLive(() => [...db.sets.values()].map((x) => ({ ...clone(x), tasks: x.tasks.map((t) => decodeTask(clone(t))) })).sort((a, b) => b.createdAt - a.createdAt))
 }
 
 export async function loadSet(_uid: string, key: string) {
   const s = db.sets.get(key)
-  return s ? clone(s) : null
+  return s ? { ...clone(s), tasks: s.tasks.map((t) => decodeTask(clone(t))) } : null
 }
 
 export async function renameSet(_uid: string, key: string, title: string) {

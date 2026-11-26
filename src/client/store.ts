@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
 import { type SavedSet, type Task, type TaskContent, taskPoints } from '../shared/domain'
 import { DEFAULT_PROGRESSION, type Progression } from '../shared/progression'
 import { checkTask } from '../shared/validate'
+import { decodeTask, encodeTask } from '../shared/codec'
 import { db } from './firebase'
 
 /** Firestore rejects `undefined`; a JSON round trip removes it. */
@@ -30,7 +31,7 @@ export function useTasks(uid: string) {
     () =>
       onSnapshot(
         query(tasksCol(uid), orderBy('createdAt', 'desc')),
-        (snap) => setTasks(snap.docs.map((d) => ({ ...(d.data() as Task), id: d.id }))),
+        (snap) => setTasks(snap.docs.map((d) => decodeTask({ ...(d.data() as Task), id: d.id }))),
         (e) => setError(e.message),
       ),
     [uid],
@@ -52,7 +53,7 @@ export async function saveNewTasks(
     batch.set(
       ref,
       clean({
-        ...content,
+        ...encodeTask(content),
         issues,
         verified,
         source: 'ai',
@@ -68,7 +69,7 @@ export async function saveNewTasks(
 export async function updateTask(uid: string, task: Task): Promise<void> {
   const { id, ...rest } = task
   const { issues, verified } = checkTask(rest)
-  await updateDoc(doc(tasksCol(uid), id), clean({ ...rest, issues, verified, editedByTeacher: true, updatedAt: Date.now() }))
+  await updateDoc(doc(tasksCol(uid), id), clean({ ...encodeTask(rest), issues, verified, editedByTeacher: true, updatedAt: Date.now() }))
 }
 
 export const deleteTask = (uid: string, id: string) => deleteDoc(doc(tasksCol(uid), id))
@@ -77,7 +78,7 @@ export const deleteTask = (uid: string, id: string) => deleteDoc(doc(tasksCol(ui
 export async function saveSet(uid: string, title: string, tasks: Task[]): Promise<string> {
   const ref = await addDoc(
     setsCol(uid),
-    clean({ title, createdAt: Date.now(), tasks, totalPoints: tasks.reduce((s, t) => s + taskPoints(t), 0) }),
+    clean({ title, createdAt: Date.now(), tasks: tasks.map(encodeTask), totalPoints: tasks.reduce((s, t) => s + taskPoints(t), 0) }),
   )
   return ref.id
 }
@@ -87,7 +88,7 @@ export function useSets(uid: string) {
   useEffect(
     () =>
       onSnapshot(query(setsCol(uid), orderBy('createdAt', 'desc')), (snap) =>
-        setSets(snap.docs.map((d) => ({ ...(d.data() as SavedSet), id: d.id }))),
+        setSets(snap.docs.map((d) => { const v = d.data() as SavedSet; return { ...v, id: d.id, tasks: v.tasks.map(decodeTask) } })),
       ),
     [uid],
   )
@@ -96,7 +97,9 @@ export function useSets(uid: string) {
 
 export async function loadSet(uid: string, id: string): Promise<SavedSet | null> {
   const snap = await getDoc(doc(setsCol(uid), id))
-  return snap.exists() ? { ...(snap.data() as SavedSet), id: snap.id } : null
+  if (!snap.exists()) return null
+  const v = snap.data() as SavedSet
+  return { ...v, id: snap.id, tasks: v.tasks.map(decodeTask) }
 }
 
 export const renameSet = (uid: string, id: string, title: string) => updateDoc(doc(setsCol(uid), id), { title })
