@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck, unit tests and build
+        run: npm run build && npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Firestore security rules (official emulator)
+        run: npm run test:rules
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: check
+    env:
+      VITE_FIREBASE_PROJECT_ID: demo-opgavebanken
+      VITE_USE_EMULATORS: '1'
+      FIREBASE_PROJECT_ID: demo-opgavebanken
+      AUTH_EMULATOR: '1'
+      MOCK_AI: '1'
+      MOCK_AI_DELAY_MS: '1500'
+      LOCAL_API: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Teacher scenario in Chrome (test AI, auth emulator)
+        run: |
+          npx firebase emulators:start --only auth --project demo-opgavebanken > auth.log 2>&1 &
+          npx tsx scripts/local-api.ts > api.log 2>&1 &
+          npx vite --mode e2e > vite.log 2>&1 &
+          npx wait-on -t 60000 http://127.0.0.1:9099 http://localhost:5173
+          CHROME=$(which google-chrome) node scripts/e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-output
+          path: test-output/e2e

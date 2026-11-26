@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// Each teacher has a private bank under /users/{uid}. Nobody else can read or write it.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validTask(t) {
+      return t.keys().hasAll(['title', 'intro', 'parts', 'grade', 'area', 'topic', 'difficulty'])
+        && t.title is string && t.title.size() > 0 && t.title.size() <= 120
+        && t.grade is int && t.grade >= 1 && t.grade <= 9
+        && t.area in ['Tal og regnestrategier', 'Algebra', 'Geometri og måling', 'Statistik og sandsynlighed']
+        && t.difficulty in ['Let', 'Middel', 'Svær']
+        && t.parts is list && t.parts.size() >= 1 && t.parts.size() <= 6;
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /tasks/{taskId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validTask(request.resource.data);
+      }
+
+      // Saved sets are snapshots: the tasks inside can never change after creation.
+      match /sets/{setId} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.tasks is list
+          && request.resource.data.tasks.size() >= 1
+          && request.resource.data.tasks.size() <= 60;
+        allow update: if isOwner(uid)
+          && request.resource.data.tasks == resource.data.tasks
+          && request.resource.data.totalPoints == resource.data.totalPoints;
+      }
+
+      match /meta/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
