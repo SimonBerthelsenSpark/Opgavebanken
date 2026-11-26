@@ -157,6 +157,9 @@ try {
   await waitText('12 opgaver er gemt i banken')
   const rows = await page.$$eval('table.bank tbody tr', (r) => r.length)
   check('12 opgaver gemt i banken', rows === 12)
+  await go('/generer')
+  check('Gemte opgaver forsvinder fra “Generér opgaver”', !(await bodyText()).includes('Forhåndsvisning'))
+  await go('/')
 
   // ---- filter and select 5 across filters
   await setSelect('Emne', 'Areal')
@@ -275,6 +278,22 @@ try {
   await waitText('over niveauet')
   await shot('06-niveau')
   check('Emne uden for niveau forklares og kan justeres', (await bodyText()).includes('Skift til 8. klasse'))
+
+  // ---- leave the page while tasks are being written, come back later
+  await go('/generer')
+  await setSelect('Klassetrin', '5')
+  await setSelect('Emne', 'custom')
+  await page.waitForSelector('input[placeholder="fx omkreds og areal"]')
+  await setInput('input[placeholder="fx omkreds og areal"]', 'areal')
+  await setInput('form.gen-form input[type=number]', '4')
+  await page.click('form.gen-form button[type=submit]')
+  await sleep(300)
+  await go('/')
+  await sleep(6000)
+  await go('/generer')
+  await waitText('Forhåndsvisning · 4 af 4 opgaver', 15000)
+  const stuck = (await bodyText()).includes('skrives …')
+  check('Generering fortsætter, når man skifter side, og intet hænger i “skrives …”', !stuck)
 } catch (e) {
   check('Uventet fejl', false, e.message)
   await shot('fejl')

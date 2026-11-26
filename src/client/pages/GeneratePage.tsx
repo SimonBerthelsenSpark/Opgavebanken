@@ -13,7 +13,8 @@ import { checkTask } from '../../shared/validate'
 import { ApiError, generateChunk, newRequestId, planTasks } from '../api'
 import { navigate } from '../App'
 import { IssueList, TaskEditor, TaskMeta, TaskView } from '../components'
-import { KEYS, useSessionState, writeSession } from '../session'
+import { createGenStore } from '../genStore'
+import { writeSession } from '../session'
 import { saveNewTasks, useProgression, useTasks } from '../store'
 
 interface Slot {
@@ -37,8 +38,10 @@ const INITIAL: GenState = {
   notices: [],
 }
 
+const useGen = createGenStore<GenState>(INITIAL)
+
 export function GeneratePage({ uid }: { uid: string }) {
-  const [state, setState] = useSessionState<GenState>(KEYS.generated, INITIAL)
+  const { state, setState, running, setRunning } = useGen()
   const { progression } = useProgression(uid)
   const { tasks: bank } = useTasks(uid)
   const [phase, setPhase] = useState<'idle' | 'planning' | 'confirm' | 'writing' | 'saving'>('idle')
@@ -56,7 +59,8 @@ export function GeneratePage({ uid }: { uid: string }) {
   const requestTopic = form.topic === 'custom' ? (form.custom ?? '').trim() : topicRequest(form.topic, form.grade)
 
   async function writeTasks(items: PlanItem[], indexes: number[], grade: number, retry = true) {
-    setPhase('writing')
+    setRunning(true)
+    setPhase('idle')
     const chunks: number[][] = []
     // first attempt in pairs; a retry sends the missing tasks one at a time (shorter calls)
     const size = retry ? TASKS_PER_CHUNK : 1
@@ -100,7 +104,7 @@ export function GeneratePage({ uid }: { uid: string }) {
       await writeTasks(items, missing, grade, false)
       return
     }
-    setPhase('idle')
+    setRunning(false)
   }
 
   async function start(e: React.FormEvent) {
@@ -150,8 +154,8 @@ export function GeneratePage({ uid }: { uid: string }) {
 
   const done = state.slots.filter((s) => s.task).length
   const kept = state.slots.filter((s) => s.task && s.keep)
-  const failedCount = state.slots.filter((s) => s.failed && !s.task).length
-  const working = phase === 'planning' || phase === 'writing' || phase === 'saving'
+  const failedCount = state.slots.filter((s) => !s.task).length
+  const working = phase === 'planning' || running || phase === 'saving'
 
   async function save() {
     if (busy.current || !kept.length) return
@@ -163,7 +167,8 @@ export function GeneratePage({ uid }: { uid: string }) {
         kept.map((s) => s.task as GeneratedTask),
       )
       writeSession('ob.flash', `${kept.length} ${kept.length === 1 ? 'opgave er' : 'opgaver er'} gemt i banken.`)
-      setState(INITIAL)
+      // saved tasks leave the preview; the form keeps its choices
+      setState((s) => ({ ...INITIAL, form: s.form }))
       navigate('/')
     } catch (e) {
       console.error(e)
@@ -262,7 +267,7 @@ export function GeneratePage({ uid }: { uid: string }) {
           </select>
         </label>
         <button type="submit" className="btn primary" disabled={working}>
-          {phase === 'planning' ? 'Planlægger …' : phase === 'writing' ? `Skriver opgaver (${done}/${state.slots.length}) …` : 'Generér opgaver'}
+          {phase === 'planning' ? 'Planlægger …' : running ? `Skriver opgaver (${done}/${state.slots.length}) …` : 'Generér opgaver'}
         </button>
         <p className="hint full">
           Højst {MAX_TASKS_PER_GENERATION} opgaver ad gangen. Sværhedsgraden vurderes i forhold til klassetrinnet. Nye opgaver
@@ -350,7 +355,7 @@ export function GeneratePage({ uid }: { uid: string }) {
               {n}
             </p>
           ))}
-          {failedCount > 0 && phase === 'idle' && (
+          {failedCount > 0 && !working && (
             <p className="notice attention">
               {failedCount} {failedCount === 1 ? 'opgave' : 'opgaver'} mangler.{' '}
               <button type="button" className="link" onClick={retryFailed}>
@@ -363,7 +368,8 @@ export function GeneratePage({ uid }: { uid: string }) {
               <li key={i} className={`panel gen-item${slot.task && !slot.keep ? ' discarded' : ''}`}>
                 {!slot.task ? (
                   <p className="muted">
-                    <strong>{slot.item.title}</strong> – {slot.failed ?? 'skrives …'}
+                    <strong>{slot.item.title}</strong> –{' '}
+                    {slot.failed ?? (running ? 'skrives …' : 'blev afbrudt (siden blev skiftet eller genindlæst).')}
                   </p>
                 ) : editing === i ? (
                   <TaskEditor
