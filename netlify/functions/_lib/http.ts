@@ -27,3 +27,35 @@ export function handler(fn: (req: Request, body: unknown) => Promise<Response>) 
     }
   }
 }
+
+/**
+ * Runs slow AI work behind a streamed response. Netlify gives streamed functions a longer time limit
+ * than buffered ones, and a space is sent every few seconds so nothing in between closes the
+ * connection. The body ends with the JSON result; an error is sent as {"error", "status"}.
+ * Leading whitespace is valid JSON, so the browser can parse the whole body as usual.
+ */
+export function streamJson(work: () => Promise<unknown>): Response {
+  const enc = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(enc.encode(' '))
+      const beat = setInterval(() => controller.enqueue(enc.encode(' ')), 4000)
+      let out: unknown
+      try {
+        out = await work()
+      } catch (e) {
+        const status = (e as { status?: number }).status ?? 500
+        if (!(e as { status?: number }).status) console.error(e)
+        out = { error: status === 500 ? 'Der skete en uventet fejl på serveren.' : (e as Error).message, status }
+      } finally {
+        clearInterval(beat)
+      }
+      controller.enqueue(enc.encode(JSON.stringify(out)))
+      controller.close()
+    },
+  })
+  return new Response(body, {
+    status: 200,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+  })
+}

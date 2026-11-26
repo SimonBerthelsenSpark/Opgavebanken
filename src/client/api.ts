@@ -25,8 +25,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     await user.reload().catch(() => undefined)
     res = await send(path, await user.getIdToken(true), body)
   }
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new ApiError(data.error ?? `Serverfejl (${res.status}).`)
+  // AI answers are streamed: spaces while the model works, then the JSON (or {"error"})
+  const text = await res.text().catch(() => '')
+  let data: { error?: string } & Record<string, unknown> = {}
+  try {
+    data = JSON.parse(text)
+  } catch {
+    if (res.ok) throw new ApiError('Forbindelsen til serveren blev afbrudt, før AI var færdig. Prøv igen.')
+  }
+  if (!res.ok || data.error) throw new ApiError(data.error ?? `Serverfejl (${res.status}).`)
   return data as T
 }
 

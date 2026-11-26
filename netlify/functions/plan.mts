@@ -1,8 +1,8 @@
 import type { Config } from '@netlify/functions'
-import { normalizeTopic, type PlanResponse, planRequestSchema, planResponseSchema } from '../../src/shared/domain'
+import { normalizeTopic, type PlanRequest, type PlanResponse, planRequestSchema, planResponseSchema } from '../../src/shared/domain'
 import { requireUser } from './_lib/auth'
 import { guard } from './_lib/guard'
-import { handler, json } from './_lib/http'
+import { handler, streamJson } from './_lib/http'
 import { structuredCall } from './_lib/openai'
 import { planPrompt } from './_lib/prompts'
 import { planJsonSchema } from './_lib/schemas'
@@ -12,7 +12,10 @@ export default handler(async (req, body) => {
   const user = await requireUser(req)
   const input = planRequestSchema.parse(body)
   await guard(user.uid, `plan-${input.requestId}`)
+  return streamJson(() => makePlan(input))
+})
 
+async function makePlan(input: PlanRequest) {
   const { system, user: userMsg } = planPrompt(input)
   const raw = await structuredCall<PlanResponse>({
     name: 'plan',
@@ -21,7 +24,7 @@ export default handler(async (req, body) => {
       { role: 'system', content: system },
       { role: 'user', content: userMsg },
     ],
-    timeoutMs: 25_000,
+    timeoutMs: Number(process.env.FUNCTION_BUDGET_MS ?? 55_000) - 3000,
   })
   const plan = planResponseSchema.parse(raw)
   let items = plan.items.map((it) => ({
@@ -35,8 +38,8 @@ export default handler(async (req, body) => {
     const src = items[items.length % plan.items.length]
     items.push({ ...src, title: `${src.title} (variant ${items.length + 1})`, angle: `${src.angle} Brug en anden situation og andre tal end opgaven "${src.title}".` })
   }
-  if (!items.length) return json({ error: 'AI lavede ingen opgaveidéer. Prøv at formulere emnet anderledes.' }, 502)
-  return json({ fit: plan.fit, items })
-})
+  if (!items.length) return { error: 'AI lavede ingen opgaveidéer. Prøv at formulere emnet anderledes.', status: 502 }
+  return { fit: plan.fit, items }
+}
 
 export const config: Config = { path: '/api/plan' }

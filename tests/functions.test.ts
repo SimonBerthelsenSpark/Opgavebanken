@@ -26,7 +26,7 @@ describe('generate function', () => {
   it('finds a wrong answer, sends it back once and returns the repaired task', async () => {
     const res = await call({ grade: 5, topic: 'areal', items, requestId: 'repair-test-1' })
     expect(res.status).toBe(200)
-    const data = await res.json()
+    const data = JSON.parse(await res.text())
     expect(data.repaired).toBe(true)
     expect(data.tasks).toHaveLength(2)
     expect(data.tasks.flatMap((t: { issues: { level: string }[] }) => t.issues.filter((i) => i.level === 'error'))).toEqual([])

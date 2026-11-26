@@ -1,14 +1,14 @@
 import type { Config } from '@netlify/functions'
-import { type GeneratedTask, generateRequestSchema } from '../../src/shared/domain'
+import { type GeneratedTask, type GenerateRequest, generateRequestSchema } from '../../src/shared/domain'
 import { evaluateOutput } from './_lib/evaluate'
 import { requireUser } from './_lib/auth'
 import { bump, guard, usageKey } from './_lib/guard'
-import { handler, json } from './_lib/http'
+import { handler, streamJson } from './_lib/http'
 import { type Msg, structuredCall } from './_lib/openai'
 import { repairPrompt, tasksPrompt } from './_lib/prompts'
 import { tasksJsonSchema } from './_lib/schemas'
 
-const BUDGET_MS = Number(process.env.FUNCTION_BUDGET_MS ?? 27_000)
+const BUDGET_MS = Number(process.env.FUNCTION_BUDGET_MS ?? 55_000)
 
 /** Step 2: write a chunk of planned ideas as full tasks, check them, and repair once if needed. */
 export default handler(async (req, body) => {
@@ -16,7 +16,10 @@ export default handler(async (req, body) => {
   const user = await requireUser(req)
   const input = generateRequestSchema.parse(body)
   await guard(user.uid, `gen-${input.requestId}`)
+  return streamJson(() => write(input, user.uid, started))
+})
 
+async function write(input: GenerateRequest, uid: string, started: number) {
   const { system, user: userMsg } = tasksPrompt(input)
   const messages: Msg[] = [
     { role: 'system', content: system },
@@ -27,7 +30,7 @@ export default handler(async (req, body) => {
   let repaired = false
 
   const remaining = BUDGET_MS - (Date.now() - started)
-  if (result.problems.length && remaining > 12_000) {
+  if (result.problems.length && remaining > 20_000) {
     try {
       const second = await structuredCall<unknown>({
         name: 'tasks',
@@ -59,8 +62,8 @@ export default handler(async (req, body) => {
   const notices: string[] = []
   if (tasks.length < input.items.length)
     notices.push(`${input.items.length - tasks.length} af ${input.items.length} opgaver kunne ikke laves korrekt og er udeladt.`)
-  if (tasks.length) await bump(usageKey(user.uid), 'tasks', tasks.length).catch(() => undefined)
-  return json({ tasks, notices, repaired })
-})
+  if (tasks.length) await bump(usageKey(uid), 'tasks', tasks.length).catch(() => undefined)
+  return { tasks, notices, repaired }
+}
 
 export const config: Config = { path: '/api/generate' }
