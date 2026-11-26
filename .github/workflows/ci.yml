@@ -14,6 +14,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: PDF text tools for the tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
       - name: Typecheck, unit tests and build
         run: npm run build && npm test
       - uses: actions/setup-java@v4
@@ -41,6 +43,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: PDF text tools for the tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
       - name: Teacher scenario in Chrome (test AI, auth emulator)
         run: |
           npx firebase emulators:start --only auth --project demo-opgavebanken > auth.log 2>&1 &
