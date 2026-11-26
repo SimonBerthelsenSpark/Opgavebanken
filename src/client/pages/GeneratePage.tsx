@@ -8,7 +8,7 @@ import {
   TASKS_PER_CHUNK,
   taskPoints,
 } from '../../shared/domain'
-import { progressionContext } from '../../shared/progression'
+import { GRADE_TOPICS, progressionContext, topicRequest } from '../../shared/progression'
 import { checkTask } from '../../shared/validate'
 import { ApiError, generateChunk, newRequestId, planTasks } from '../api'
 import { navigate } from '../App'
@@ -24,14 +24,14 @@ interface Slot {
 }
 
 interface GenState {
-  form: { grade: number; topic: string; count: number; difficulty: string }
+  form: { grade: number; topic: string; custom?: string; count: number; difficulty: string }
   fit: Fit | null
   slots: Slot[]
   notices: string[]
 }
 
 const INITIAL: GenState = {
-  form: { grade: 5, topic: '', count: 12, difficulty: 'Blandet' },
+  form: { grade: 5, topic: 'mixed:all', custom: '', count: 12, difficulty: 'Blandet' },
   fit: null,
   slots: [],
   notices: [],
@@ -51,6 +51,9 @@ export function GeneratePage({ uid }: { uid: string }) {
   const { form } = state
   const setForm = (patch: Partial<GenState['form']>) => setState((s) => ({ ...s, form: { ...s.form, ...patch } }))
   const context = progressionContext(progression, form.grade)
+  const catalog = GRADE_TOPICS[form.grade] ?? {}
+  const inCatalog = (g: number, t: string) => Object.values(GRADE_TOPICS[g] ?? {}).some((ts) => ts.includes(t))
+  const requestTopic = form.topic === 'custom' ? (form.custom ?? '').trim() : topicRequest(form.topic, form.grade)
 
   async function writeTasks(items: PlanItem[], indexes: number[], grade: number) {
     setPhase('writing')
@@ -62,7 +65,7 @@ export function GeneratePage({ uid }: { uid: string }) {
         try {
           const res = await generateChunk({
             grade,
-            topic: form.topic,
+            topic: requestTopic,
             items: idx.map((i) => items[i]),
             siblings: items.filter((_, i) => !idx.includes(i)).map((it) => it.title),
             progression: context,
@@ -96,7 +99,7 @@ export function GeneratePage({ uid }: { uid: string }) {
     setError(null)
     setPhase('planning')
     try {
-      const plan = await planTasks({ ...form, progression: context, requestId: newRequestId() })
+      const plan = await planTasks({ grade: form.grade, topic: requestTopic, count: form.count, difficulty: form.difficulty, progression: context, requestId: newRequestId() })
       setState((s) => ({ ...s, fit: plan.fit, slots: [], notices: [] }))
       if (plan.fit.status !== 'passer') {
         setPendingPlan(plan)
@@ -167,7 +170,16 @@ export function GeneratePage({ uid }: { uid: string }) {
       <form className="panel gen-form" onSubmit={start}>
         <label className="field">
           <span className="field-label">Klassetrin</span>
-          <select value={form.grade} onChange={(e) => setForm({ grade: Number(e.target.value) })} disabled={working}>
+          <select
+            value={form.grade}
+            onChange={(e) => {
+              const g = Number(e.target.value)
+              // keep "Blandet" and custom topics; a catalogue topic that the new grade lacks falls back to mixed
+              const keep = form.topic.startsWith('mixed:') || form.topic === 'custom' || inCatalog(g, form.topic)
+              setForm({ grade: g, topic: keep ? form.topic : 'mixed:all' })
+            }}
+            disabled={working}
+          >
             {GRADES.map((g) => (
               <option key={g} value={g}>
                 {g}. klasse
@@ -177,16 +189,35 @@ export function GeneratePage({ uid }: { uid: string }) {
         </label>
         <label className="field grow">
           <span className="field-label">Emne</span>
-          <input
-            value={form.topic}
-            onChange={(e) => setForm({ topic: e.target.value })}
-            placeholder="fx omkreds og areal"
-            required
-            minLength={2}
-            maxLength={120}
-            disabled={working}
-          />
+          <select value={form.topic} onChange={(e) => setForm({ topic: e.target.value })} disabled={working} aria-label="Emne">
+            <option value="mixed:all">Blandet – hele {form.grade}. klasses pensum</option>
+            {Object.entries(catalog).map(([area, list]) => (
+              <optgroup key={area} label={area}>
+                <option value={`mixed:${area}`}>Blandet – {area}</option>
+                {list.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+            <option value="custom">Andet emne (skriv selv) …</option>
+          </select>
         </label>
+        {form.topic === 'custom' && (
+          <label className="field grow">
+            <span className="field-label">Dit emne</span>
+            <input
+              value={form.custom ?? ''}
+              onChange={(e) => setForm({ custom: e.target.value })}
+              placeholder="fx omkreds og areal"
+              required
+              minLength={2}
+              maxLength={120}
+              disabled={working}
+            />
+          </label>
+        )}
         <label className="field">
           <span className="field-label">Antal</span>
           <input

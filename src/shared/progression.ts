@@ -186,3 +186,78 @@ export function progressionContext(p: Progression, grade: number): string {
   for (const [area, goals] of Object.entries(stage.goals)) lines.push(`  - ${area}: ${goals.join(' ')}`)
   return lines.join('\n')
 }
+
+/**
+ * Topics per grade for the "Emne" dropdown, grouped by area. The app's own suggested placement
+ * (like DEFAULT_PROGRESSION), so generated tasks get consistent topic names that filter well.
+ */
+export const GRADE_TOPICS: Record<number, Record<Area, string[]>> = {
+  1: {
+    'Tal og regnestrategier': ['Tal til 100', 'Plus og minus', 'Tælle og sammenligne', 'Penge'],
+    Algebra: ['Talmønstre', 'Ukendte tal'],
+    'Geometri og måling': ['Figurer', 'Længde', 'Klokken'],
+    'Statistik og sandsynlighed': ['Tabeller og diagrammer'],
+  },
+  2: {
+    'Tal og regnestrategier': ['Tal til 1000', 'Plus og minus', 'Gange', 'Penge'],
+    Algebra: ['Mønstre', 'Regneregler'],
+    'Geometri og måling': ['Figurer', 'Længde og måling', 'Klokken og tid'],
+    'Statistik og sandsynlighed': ['Tabeller og diagrammer'],
+  },
+  3: {
+    'Tal og regnestrategier': ['Tal til 10.000', 'Gange', 'Division', 'Overslag', 'Penge'],
+    Algebra: ['Ukendte tal', 'Regneudtryk'],
+    'Geometri og måling': ['Areal', 'Spejling', 'Længde og vægt', 'Klokken og tid'],
+    'Statistik og sandsynlighed': ['Diagrammer', 'Chance'],
+  },
+  4: {
+    'Tal og regnestrategier': ['Brøker', 'Decimaltal', 'Gange', 'Division', 'Overslag'],
+    Algebra: ['Regneudtryk', 'Talmønstre'],
+    'Geometri og måling': ['Vinkler', 'Polygoner', 'Omkreds', 'Areal', 'Koordinatsystem'],
+    'Statistik og sandsynlighed': ['Diagrammer', 'Typetal og variationsbredde'],
+  },
+  5: {
+    'Tal og regnestrategier': ['Brøker', 'Decimaltal', 'Procent', 'Negative tal', 'Gange og division'],
+    Algebra: ['Ligninger', 'Variable og formler'],
+    'Geometri og måling': ['Omkreds', 'Areal', 'Vinkler', 'Symmetri', 'Koordinatsystem'],
+    'Statistik og sandsynlighed': ['Middeltal og median', 'Sandsynlighed', 'Diagrammer'],
+  },
+  6: {
+    'Tal og regnestrategier': ['Brøker', 'Decimaltal', 'Procent', 'Negative tal', 'Forhold'],
+    Algebra: ['Ligninger', 'Formler', 'Grafer'],
+    'Geometri og måling': ['Areal', 'Omkreds', 'Rumfang', 'Koordinatsystem', 'Målestoksforhold'],
+    'Statistik og sandsynlighed': ['Hyppighed og frekvens', 'Middeltal og median', 'Sandsynlighed'],
+  },
+  7: {
+    'Tal og regnestrategier': ['Procent', 'Forhold', 'Potenser', 'Kvadratrod', 'Brøker'],
+    Algebra: ['Ligninger', 'Reduktion', 'Formler', 'Lineære sammenhænge'],
+    'Geometri og måling': ['Cirkler', 'Vinkler', 'Trekanter', 'Rumfang'],
+    'Statistik og sandsynlighed': ['Hyppighed og frekvens', 'Sandsynlighed', 'Kombinatorik'],
+  },
+  8: {
+    'Tal og regnestrategier': ['Potenser og kvadratrod', 'Procent', 'Renter', 'Store og små tal'],
+    Algebra: ['Lineære funktioner', 'Ligninger', 'Formler'],
+    'Geometri og måling': ['Pythagoras', 'Ligedannede figurer', 'Rumfang og overflade', 'Cirkler'],
+    'Statistik og sandsynlighed': ['Boksplot og kvartiler', 'Grupperede data', 'Sandsynlighed'],
+  },
+  9: {
+    'Tal og regnestrategier': ['Procent og vækst', 'Økonomi', 'Reelle tal'],
+    Algebra: ['Lineære funktioner', 'Eksponentielle funktioner', 'Ligningssystemer', 'Andengradsudtryk'],
+    'Geometri og måling': ['Rumfang og overflade', 'Pythagoras', 'Målestoksforhold', 'Ligedannede figurer'],
+    'Statistik og sandsynlighed': ['Statistik og stikprøver', 'Sandsynlighed'],
+  },
+}
+
+export const MIXED_PREFIX = 'Blandet'
+
+/** The topic text sent to the model for a dropdown choice. */
+export function topicRequest(choice: string, grade: number): string {
+  if (choice === 'mixed:all') return `${MIXED_PREFIX}: emner fra hele ${grade}. klasses pensum`
+  if (choice.startsWith('mixed:')) return `${MIXED_PREFIX} inden for ${choice.slice(6)} (${grade}. klasse)`
+  return choice
+}
+
+export function topicCatalogText(grade: number): string {
+  const row = GRADE_TOPICS[grade]
+  return row ? Object.entries(row).map(([a, ts]) => `  - ${a}: ${ts.join(', ')}`).join('\n') : ''
+}

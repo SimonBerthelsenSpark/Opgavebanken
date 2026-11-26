@@ -118,6 +118,8 @@ try {
   await clickText('Generér dine første opgaver')
   await page.waitForSelector('form.gen-form')
   await setSelect('Klassetrin', '5')
+  await setSelect('Emne', 'custom')
+  await page.waitForSelector('input[placeholder="fx omkreds og areal"]')
   await setInput('input[placeholder="fx omkreds og areal"]', 'omkreds og areal')
   await setInput('form.gen-form input[type=number]', '12')
   // a fast double click: two clicks in the same moment
@@ -263,6 +265,10 @@ try {
   // ---- topic outside the grade level
   await go('/generer')
   await setSelect('Klassetrin', '3')
+  const options = await page.$$eval('select[aria-label="Emne"] option', (o) => o.map((x) => x.textContent))
+  check('Emnelisten følger klassetrinnet og har "Blandet"', options.includes('Areal') && !options.includes('Pythagoras') && options[0].startsWith('Blandet'), options.slice(0, 4).join(', ') + ' …')
+  await setSelect('Emne', 'custom')
+  await page.waitForSelector('input[placeholder="fx omkreds og areal"]')
   await setInput('input[placeholder="fx omkreds og areal"]', 'Pythagoras')
   await setInput('form.gen-form input[type=number]', '3')
   await page.click('form.gen-form button[type=submit]')

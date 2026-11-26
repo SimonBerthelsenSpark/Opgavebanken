@@ -1,4 +1,5 @@
 import { AREAS, type PlanItem } from '../../../src/shared/domain'
+import { topicCatalogText } from '../../../src/shared/progression'
 
 export function planPrompt(args: {
   grade: number
@@ -21,7 +22,8 @@ Skriv en kort forklaring (1–2 sætninger, henvend dig til læreren med "du"). 
 - "angle" beskriver konkret, hvad opgaven går ud på, og hvordan den adskiller sig fra de andre (1–2 sætninger).
 - Sværhedsgrad vurderes relativt til klassetrinnet. Er en bestemt sværhedsgrad valgt, får alle idéer den. Ved "Blandet" fordeles idéerne nogenlunde ligeligt på Let, Middel og Svær, sorteret fra let til svær.
 - "area" er ét af: ${AREAS.join(', ')}.
-- "topic" er et kort emne på 1–3 ord med stort begyndelsesbogstav (fx "Areal", "Omkreds", "Brøker").
+- "topic" er et kort emne på 1–3 ord med stort begyndelsesbogstav. Brug så vidt muligt præcis et af emnerne i emnekataloget for klassetrinnet, så lærerens filtre virker.
+- Starter emnet med "Blandet", skal idéerne fordeles på flere forskellige emner fra kataloget (ved "hele pensum" også på flere områder), og emnet vurderes altid som "passer".
 - "needsFigure" er true, når opgaven skal have en tegnet figur med mål (fx de fleste areal- og omkredsopgaver i indskoling og mellemtrin).
 - Titler skal være korte og forskellige.`
 
@@ -29,6 +31,9 @@ Skriv en kort forklaring (1–2 sætninger, henvend dig til læreren med "du"). 
 Emne (lærerens ord): ${args.topic}
 Antal opgaver: ${args.count}
 Sværhedsgrad: ${args.difficulty}
+
+Emnekatalog for ${args.grade}. klasse:
+${topicCatalogText(args.grade)}
 
 Progression (lærerens vejledende placering og de officielle mål for trinforløbet):
 ${args.progression}`
