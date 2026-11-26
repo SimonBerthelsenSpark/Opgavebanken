@@ -87,6 +87,8 @@ export interface Issue {
 /** A task as stored in the bank. */
 export interface Task extends TaskContent {
   id: string
+  /** The teacher who saved the task. Everyone can see and use it; only the owner can change it. */
+  ownerUid: string
   issues: Issue[]
   /** Per part: whether the numeric check was recomputed and agreed. */
   verified: boolean[]

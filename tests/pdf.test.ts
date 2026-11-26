@@ -11,6 +11,7 @@ const fonts = {
 
 const base = (i: number, over: Partial<Task>): Task => ({
   id: `t${i}`,
+  ownerUid: 'u1',
   title: `Opgave ${i}`,
   intro: '',
   figure: null,

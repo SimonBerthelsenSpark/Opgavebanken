@@ -157,6 +157,28 @@ try {
   await waitText('12 opgaver er gemt i banken')
   const rows = await page.$$eval('table.bank tbody tr', (r) => r.length)
   check('12 opgaver gemt i banken', rows === 12)
+  // ---- shared bank: a colleague's task is visible and usable, but not editable
+  await page.evaluate(() =>
+    window.__addForeignTask({
+      id: 'kollega1', ownerUid: 'en-anden-laerer', title: 'Kollegas brøkopgave', intro: 'Pizzaen deles.', figure: null,
+      parts: [{ question: 'Hvor meget er \\frac{1}{2} + \\frac{1}{4}?', answer: '\\frac{3}{4}', solution: 'Fælles nævner', points: 1,
+        criteria: [{ points: 1, description: 'Korrekt' }], check: { expression: '1/2+1/4', value: 0.75, unit: '' } }],
+      grade: 5, area: 'Tal og regnestrategier', topic: 'Brøker', difficulty: 'Let', issues: [], verified: [true],
+      source: 'ai', editedByTeacher: false, createdAt: 1, updatedAt: 1,
+    }),
+  )
+  await waitText('Kollegas brøkopgave')
+  await page.evaluate(() => [...document.querySelectorAll('table.bank button.link.title')].find((b) => b.textContent === 'Kollegas brøkopgave').click())
+  await sleep(200)
+  const foreign = await bodyText()
+  check('Kollegers opgaver ses i den fælles bank, men kan ikke rettes', foreign.includes('lavet af en kollega') && foreign.includes('Kollega'))
+  await page.evaluate(() => [...document.querySelectorAll('label.inline.mine input')][0].click())
+  await sleep(200)
+  const mineRows = await page.$$eval('table.bank tbody tr', (r) => r.length)
+  check('“Kun mine opgaver” skjuler kollegers opgaver', mineRows === 12, `${mineRows} rækker`)
+  await page.evaluate(() => [...document.querySelectorAll('label.inline.mine input')][0].click())
+  await page.evaluate(() => [...document.querySelectorAll('table.bank button.link.title')].find((b) => b.textContent === 'Kollegas brøkopgave').click())
+
   await go('/generer')
   check('Gemte opgaver forsvinder fra “Generér opgaver”', !(await bodyText()).includes('Forhåndsvisning'))
   await go('/')

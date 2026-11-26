@@ -1,6 +1,7 @@
 import { onAuthStateChanged, sendEmailVerification, signOut, type User } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { auth, firebaseConfigured } from './firebase'
+import { migratePrivateTasks } from './store'
 import { BankPage } from './pages/BankPage'
 import { GeneratePage } from './pages/GeneratePage'
 import { LoginPage } from './pages/LoginPage'
@@ -34,7 +35,15 @@ const TABS = [
 export function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined)
   const path = usePath()
-  useEffect(() => onAuthStateChanged(auth, setUser), [])
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, (u) => {
+        setUser(u)
+        // version 1 kept a private bank per teacher; move it into the shared bank once
+        if (u) migratePrivateTasks(u.uid).catch((e) => console.warn('Flytning af opgaver mislykkedes', e))
+      }),
+    [],
+  )
 
   if (!firebaseConfigured)
     return (

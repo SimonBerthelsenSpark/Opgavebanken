@@ -53,4 +53,12 @@ export async function guard(uid: string, requestId: string): Promise<void> {
   if (used >= limit)
     throw new GuardError('Du har brugt timens kvote for AI-generering. Prøv igen senere.', 429)
   await store.set(rateKey, String(used + 1))
+
+  // A ceiling for all teachers together, so the OpenAI bill cannot run away.
+  const dayLimit = Number(process.env.AI_CALLS_PER_DAY_TOTAL ?? 500)
+  const dayKey = `rate/all/${new Date().toISOString().slice(0, 10)}`
+  const today = Number((await store.get(dayKey)) ?? 0)
+  if (today >= dayLimit)
+    throw new GuardError('Dagens samlede kvote for AI-generering er brugt. Prøv igen i morgen.', 429)
+  await store.set(dayKey, String(today + 1))
 }

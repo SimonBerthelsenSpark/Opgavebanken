@@ -22,7 +22,11 @@ export function BankPage({ uid }: { uid: string }) {
 
   const all = tasks ?? []
   const byId = useMemo(() => new Map(all.map((t) => [t.id, t])), [all])
-  const visible = useMemo(() => all.filter((t) => matches(t, filters)), [all, filters])
+  const [onlyMine, setOnlyMine] = useSessionState<boolean>('ob.onlyMine', false)
+  const visible = useMemo(
+    () => all.filter((t) => matches(t, filters) && (!onlyMine || t.ownerUid === uid)),
+    [all, filters, onlyMine, uid],
+  )
   const topics = useMemo(() => [...new Set(all.map((t) => t.topic))].sort((a, b) => a.localeCompare(b, 'da')), [all])
   // selections survive filter changes; tasks deleted elsewhere drop out
   const chosen = selected.map((id) => byId.get(id)).filter((t): t is Task => Boolean(t))
@@ -117,7 +121,18 @@ export function BankPage({ uid }: { uid: string }) {
           <span className="field-label">Søg</span>
           <input type="search" placeholder="Søg i titel, tekst og facit" value={filters.q} onChange={(e) => f({ q: e.target.value })} />
         </label>
-        <button type="button" className="btn outline" disabled={!filtersActive(filters)} onClick={() => setFilters(EMPTY_FILTERS)}>
+        <label className="inline mine">
+          <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> Kun mine opgaver
+        </label>
+        <button
+          type="button"
+          className="btn outline"
+          disabled={!filtersActive(filters) && !onlyMine}
+          onClick={() => {
+            setFilters(EMPTY_FILTERS)
+            setOnlyMine(false)
+          }}
+        >
           Nulstil filtre
         </button>
       </section>
@@ -236,11 +251,12 @@ export function BankPage({ uid }: { uid: string }) {
                     setFlash('Opgaven er opdateret. Gemte sæt bruger stadig den version, de blev gemt med.')
                   }}
                   onDelete={async () => {
-                    if (!confirm(`Slet "${t.title}" fra banken? Gemte sæt påvirkes ikke.`)) return
+                    if (!confirm(`Slet "${t.title}" fra den fælles bank? Den forsvinder også for dine kolleger. Gemte sæt påvirkes ikke.`)) return
                     await deleteTask(uid, t.id)
                     setSelected((s) => s.filter((x) => x !== t.id))
                   }}
                   topics={topics}
+                  mine={t.ownerUid === uid}
                 />
               ))}
             </tbody>
@@ -266,6 +282,7 @@ function BankRow(props: {
   onSave: (t: Task) => Promise<void>
   onDelete: () => void
   topics: string[]
+  mine: boolean
 }) {
   const { task: t } = props
   const flagged = t.issues?.some((i) => i.level === 'error')
@@ -281,6 +298,7 @@ function BankRow(props: {
           </button>
           {flagged && <span className="badge check">Tjek</span>}
           {t.editedByTeacher && <span className="badge quiet">Rettet</span>}
+          {!props.mine && <span className="badge quiet">Kollega</span>}
         </td>
         <td>{t.grade}. kl.</td>
         <td>{t.area}</td>
@@ -305,14 +323,18 @@ function BankRow(props: {
               <>
                 <IssueList issues={t.issues ?? []} />
                 <TaskView task={t} showGuide verified={t.verified} />
-                <div className="actions">
-                  <button type="button" className="btn outline sm" onClick={props.onEdit}>
-                    Rediger
-                  </button>
-                  <button type="button" className="btn ghost sm danger" onClick={props.onDelete}>
-                    Slet
-                  </button>
-                </div>
+                {props.mine ? (
+                  <div className="actions">
+                    <button type="button" className="btn outline sm" onClick={props.onEdit}>
+                      Rediger
+                    </button>
+                    <button type="button" className="btn ghost sm danger" onClick={props.onDelete}>
+                      Slet
+                    </button>
+                  </div>
+                ) : (
+                  <p className="hint">Opgaven er lavet af en kollega. Du kan bruge den i dine sæt, men kun kollegaen kan rette eller slette den.</p>
+                )}
               </>
             )}
           </td>

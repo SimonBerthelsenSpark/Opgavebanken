@@ -4,6 +4,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -21,20 +22,23 @@ import { db } from './firebase'
 /** Firestore rejects `undefined`; a JSON round trip removes it. */
 const clean = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 
-const tasksCol = (uid: string) => collection(db, 'users', uid, 'tasks')
+/** The shared bank: every logged-in teacher sees every task. */
+const tasksCol = () => collection(db, 'tasks')
+/** Where version 1 kept each teacher's private bank (moved to the shared bank on login). */
+const oldTasksCol = (uid: string) => collection(db, 'users', uid, 'tasks')
 const setsCol = (uid: string) => collection(db, 'users', uid, 'sets')
 
-export function useTasks(uid: string) {
+export function useTasks(_uid: string) {
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(
     () =>
       onSnapshot(
-        query(tasksCol(uid), orderBy('createdAt', 'desc')),
+        query(tasksCol(), orderBy('createdAt', 'desc')),
         (snap) => setTasks(snap.docs.map((d) => decodeTask({ ...(d.data() as Task), id: d.id }))),
         (e) => setError(e.message),
       ),
-    [uid],
+    [],
   )
   return { tasks, error }
 }
@@ -47,13 +51,14 @@ export async function saveNewTasks(
   const now = Date.now()
   items.forEach((t, i) => {
     const { issues, verified } = checkTask(t)
-    const ref = doc(tasksCol(uid))
+    const ref = doc(tasksCol())
     const { editedByTeacher, ...content } = t as TaskContent & { editedByTeacher?: boolean; id?: string }
     delete (content as { id?: string }).id
     batch.set(
       ref,
       clean({
         ...encodeTask(content),
+        ownerUid: uid,
         issues,
         verified,
         source: 'ai',
@@ -69,10 +74,10 @@ export async function saveNewTasks(
 export async function updateTask(uid: string, task: Task): Promise<void> {
   const { id, ...rest } = task
   const { issues, verified } = checkTask(rest)
-  await updateDoc(doc(tasksCol(uid), id), clean({ ...encodeTask(rest), issues, verified, editedByTeacher: true, updatedAt: Date.now() }))
+  await updateDoc(doc(tasksCol(), id), clean({ ...encodeTask(rest), issues, verified, editedByTeacher: true, updatedAt: Date.now() }))
 }
 
-export const deleteTask = (uid: string, id: string) => deleteDoc(doc(tasksCol(uid), id))
+export const deleteTask = (_uid: string, id: string) => deleteDoc(doc(tasksCol(), id))
 
 /** Saves a frozen copy of the tasks; later edits in the bank do not change it. */
 export async function saveSet(uid: string, title: string, tasks: Task[]): Promise<string> {
@@ -130,3 +135,16 @@ export function useProgression(uid: string) {
 export const saveProgression = (uid: string, grades: Progression) =>
   setDoc(progressionDoc(uid), { grades, updatedAt: Date.now() })
 export const resetProgression = (uid: string) => deleteDoc(progressionDoc(uid))
+
+/** Moves tasks from the old private bank (users/{uid}/tasks) into the shared bank, once. */
+export async function migratePrivateTasks(uid: string): Promise<number> {
+  const old = await getDocs(oldTasksCol(uid))
+  if (old.empty) return 0
+  const batch = writeBatch(db)
+  for (const d of old.docs) {
+    batch.set(doc(tasksCol(), d.id), { ...d.data(), ownerUid: uid })
+    batch.delete(d.ref)
+  }
+  await batch.commit()
+  return old.size
+}

@@ -1,6 +1,8 @@
 rules_version = '2';
 
-// Each teacher has a private bank under /users/{uid}. Nobody else can read or write it.
+// The task bank is shared: every logged-in teacher can see and use all tasks, and teachers with a
+// verified e-mail can add tasks. Only the teacher who saved a task can change or delete it.
+// Saved sets, progression and the old private bank stay private under /users/{uid}.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -17,12 +19,28 @@ service cloud.firestore {
         && t.parts is list && t.parts.size() >= 1 && t.parts.size() <= 6;
     }
 
+    function verified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    match /tasks/{taskId} {
+      allow read: if request.auth != null;
+      allow create: if verified()
+        && request.resource.data.ownerUid == request.auth.uid
+        && validTask(request.resource.data);
+      allow update: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && validTask(request.resource.data);
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+    }
+
     match /users/{uid} {
       allow read, write: if isOwner(uid);
 
+      // version 1's private bank: only read and delete (the app moves it to /tasks on login)
       match /tasks/{taskId} {
         allow read, delete: if isOwner(uid);
-        allow create, update: if isOwner(uid) && validTask(request.resource.data);
       }
 
       // Saved sets are snapshots: the tasks inside can never change after creation.

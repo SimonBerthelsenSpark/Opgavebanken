@@ -6,7 +6,7 @@
 const PROJECT = 'demo-opgavebanken'
 const BASE = `http://${process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080'}/v1/projects/${PROJECT}/databases/(default)/documents`
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url')
-const token = (uid) => `${b64({ alg: 'none' })}.${b64({ sub: uid, user_id: uid, aud: PROJECT, iss: `https://securetoken.google.com/${PROJECT}`, iat: 0, exp: 9999999999, auth_time: 0, firebase: { sign_in_provider: 'password' } })}.`
+const token = (uid) => `${b64({ alg: 'none' })}.${b64({ sub: uid, user_id: uid, email: `${uid}@skole.dk`, email_verified: !uid.startsWith('U'), aud: PROJECT, iss: `https://securetoken.google.com/${PROJECT}`, iat: 0, exp: 9999999999, auth_time: 0, firebase: { sign_in_provider: 'password' } })}.`
 
 const v = (x) => {
   if (x === null) return { nullValue: null }
@@ -43,14 +43,20 @@ const expect = (name, status, ok) => {
   console.log(`${pass ? '✔' : '✘'} ${name} (HTTP ${status})`)
 }
 
-expect('Lærer A opretter egen opgave', await req('PATCH', 'users/A/tasks/t1', 'A', doc(task)), true)
-expect('Lærer A læser egen opgave', await req('GET', 'users/A/tasks/t1', 'A'), true)
-expect('Lærer B kan ikke læse A’s opgave', await req('GET', 'users/A/tasks/t1', 'B'), false)
-expect('Lærer B kan ikke ændre A’s opgave', await req('PATCH', 'users/A/tasks/t1', 'B', doc({ ...task, title: 'Hacket' })), false)
-expect('Lærer B kan ikke slette A’s opgave', await req('DELETE', 'users/A/tasks/t1', 'B'), false)
-expect('Uden login: ingen adgang', await req('GET', 'users/A/tasks/t1', null), false)
-expect('Ugyldig opgave (klassetrin 12) afvises', await req('PATCH', 'users/A/tasks/t2', 'A', doc({ ...task, grade: 12 })), false)
-expect('Ugyldigt område afvises', await req('PATCH', 'users/A/tasks/t3', 'A', doc({ ...task, area: 'Kemi' })), false)
+expect('Lærer A gemmer en opgave i den fælles bank', await req('PATCH', 'tasks/t1', 'A', doc({ ...task, ownerUid: 'A' })), true)
+expect('Lærer B kan se A’s opgave', await req('GET', 'tasks/t1', 'B'), true)
+expect('Lærer B kan ikke ændre A’s opgave', await req('PATCH', 'tasks/t1', 'B', doc({ ...task, ownerUid: 'A', title: 'Hacket' })), false)
+expect('Lærer B kan ikke overtage A’s opgave', await req('PATCH', 'tasks/t1', 'B', doc({ ...task, ownerUid: 'B' })), false)
+expect('Lærer B kan ikke slette A’s opgave', await req('DELETE', 'tasks/t1', 'B'), false)
+expect('Lærer A kan rette sin egen opgave', await req('PATCH', 'tasks/t1', 'A', doc({ ...task, ownerUid: 'A', title: 'Rettet' })), true)
+expect('Lærer B kan ikke gemme en opgave i A’s navn', await req('PATCH', 'tasks/t9', 'B', doc({ ...task, ownerUid: 'A' })), false)
+expect('Ubekræftet e-mail kan ikke tilføje opgaver', await req('PATCH', 'tasks/t8', 'Uny', doc({ ...task, ownerUid: 'Uny' })), false)
+expect('Ubekræftet bruger kan se banken', await req('GET', 'tasks/t1', 'Uny'), true)
+expect('Uden login: ingen adgang', await req('GET', 'tasks/t1', null), false)
+expect('Ugyldig opgave (klassetrin 12) afvises', await req('PATCH', 'tasks/t2', 'A', doc({ ...task, ownerUid: 'A', grade: 12 })), false)
+expect('Ugyldigt område afvises', await req('PATCH', 'tasks/t3', 'A', doc({ ...task, ownerUid: 'A', area: 'Kemi' })), false)
+expect('Lærer A kan slette sin egen opgave', await req('DELETE', 'tasks/t1', 'A'), true)
+expect('Gammel privat bank kan ikke få nye opgaver', await req('PATCH', 'users/A/tasks/x', 'A', doc(task)), false)
 const set = { title: 'Sæt', createdAt: 1, totalPoints: 1, tasks: [task] }
 expect('Lærer A gemmer et sæt', await req('PATCH', 'users/A/sets/s1', 'A', doc(set)), true)
 expect('Sættets titel kan ændres', await req('PATCH', 'users/A/sets/s1', 'A', doc({ title: 'Nyt navn' }), '?updateMask.fieldPaths=title'), true)

@@ -53,7 +53,8 @@ Hvert trin slutter med **Sådan ser du, at det virker**.
    | `VITE_FIREBASE_APP_ID` | `appId` | Firebase trin 2.6 |
    | `FIREBASE_PROJECT_ID` | samme som `projectId` | Firebase trin 2.1 |
    | `OPENAI_API_KEY` | nøglen | OpenAI trin 3.2 – sæt flueben ved **Contains secret values**, scope **Functions** |
-   | `ALLOWED_EMAILS` | din e-mail (kommasepareret liste) | Kun disse konti kan bruge AI. Tom = alle med login |
+   | `ALLOWED_EMAILS` | tom (eller en kommasepareret liste) | Tom = alle lærere med bekræftet e-mail kan generere. Udfyldt = kun disse |
+| `AI_CALLS_PER_DAY_TOTAL` | `500` | Valgfri. Samlet loft over AI-kald pr. døgn for alle lærere |
    | `OPENAI_MODEL` | `gpt-5.6-terra` | Valgfri. Kan skiftes uden kodeændring |
 
 3. **Deploys → Trigger deploy → Clear cache and deploy project**.
@@ -88,6 +89,8 @@ Gratis og uden internet-konti: Firebase-emulatorer + test-AI. Sæt i `.env`:
 
 ## 6. Drift og sikkerhed
 
-- **Kun egne data:** Firestore-reglerne giver kun adgang til `/users/{eget UID}/…`. Gemte sæt kan ikke ændres bagefter (kun titlen).
-- **AI-kald:** Kun fra serverfunktionerne. Login kontrolleres på serveren (Firebase ID-token verificeres mod Googles nøgler). Højst 20 opgaver pr. generering, 3 pr. kald, og `AI_CALLS_PER_HOUR` (standard 60) pr. lærer. Samme forespørgsel kan ikke sendes to gange.
+- **Fælles opgavebank:** Alle lærere med login kan se og bruge alle opgaver i `/tasks`. Lærere med bekræftet e-mail kan tilføje opgaver. Kun den lærer, der har gemt en opgave, kan rette eller slette den.
+- **Private data:** Gemte sæt og progression ligger under `/users/{eget UID}/…` og kan kun ses af læreren selv. Gemte sæt kan ikke ændres bagefter (kun titlen).
+- **AI-kald:** Kun fra serverfunktionerne. Login og bekræftet e-mail kontrolleres på serveren (Firebase ID-token verificeres mod Googles nøgler). Højst 20 opgaver pr. generering, 2 pr. kald, `AI_CALLS_PER_HOUR` (standard 60) pr. lærer og `AI_CALLS_PER_DAY_TOTAL` (standard 500) for alle tilsammen. Samme forespørgsel kan ikke sendes to gange.
+- **Når `firestore.rules` ændres**, skal reglerne publiceres igen i Firebase (trin 2.5). Netlify gør det ikke.
 - **Luk for nye konti:** Firebase → Authentication → Settings → **User actions** → slå *Enable create (sign-up)* fra, når de rigtige lærere er oprettet. Eller brug `ALLOWED_EMAILS`.

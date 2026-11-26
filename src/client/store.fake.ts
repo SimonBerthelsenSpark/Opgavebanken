@@ -49,7 +49,7 @@ export async function saveNewTasks(_uid: string, items: (TaskContent & { editedB
   items.forEach((t, i) => {
     const { issues, verified } = checkTask(t)
     const key = id()
-    db.tasks.set(key, write({ ...encodeTask(t as Task), id: key, issues, verified, source: 'ai', editedByTeacher: Boolean(t.editedByTeacher), createdAt: now + (items.length - i), updatedAt: now }))
+    db.tasks.set(key, write({ ...encodeTask(t as Task), ownerUid: _uid, id: key, issues, verified, source: 'ai', editedByTeacher: Boolean(t.editedByTeacher), createdAt: now + (items.length - i), updatedAt: now }))
   })
   emit()
 }
@@ -104,5 +104,15 @@ export async function saveProgression(_uid: string, grades: Progression) {
 
 export async function resetProgression(_uid: string) {
   db.progression = null
+  emit()
+}
+
+export async function migratePrivateTasks(_uid: string) {
+  return 0
+}
+
+/** Test helper: a task saved by another teacher. */
+;(window as unknown as { __addForeignTask: (t: Task) => void }).__addForeignTask = (t: Task) => {
+  db.tasks.set(t.id, write(encodeTask(t)))
   emit()
 }

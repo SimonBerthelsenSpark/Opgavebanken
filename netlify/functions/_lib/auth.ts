@@ -50,16 +50,18 @@ export async function requireUser(req: Request): Promise<User> {
   if (!uid) throw new AuthError('Ugyldigt login.')
   const email = typeof payload.email === 'string' ? payload.email.toLowerCase() : null
 
-  // Optional allow-list, so only invited teachers can spend tokens.
+  // Every teacher can generate, but only with a confirmed e-mail (Google accounts are confirmed).
+  // The emulator's test accounts are unconfirmed, so local development skips this check.
+  const emulator = process.env.AUTH_EMULATOR === '1' && process.env.CONTEXT !== 'production'
+  if (!emulator && payload.email_verified !== true)
+    throw new AuthError('Bekræft din e-mail via linket, vi har sendt dig, og log ind igen.', 403)
+
+  // Optional allow-list (empty = every teacher with a confirmed e-mail).
   const allowed = (process.env.ALLOWED_EMAILS ?? '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
-  if (allowed.length) {
-    if (!email || !allowed.includes(email)) throw new AuthError('Din konto har ikke adgang til AI-generering endnu.', 403)
-    // otherwise anyone could sign up with an allowed address they do not own
-    if (payload.email_verified !== true)
-      throw new AuthError('Bekræft din e-mail via linket, vi har sendt dig, og log ind igen.', 403)
-  }
+  if (allowed.length && (!email || !allowed.includes(email)))
+    throw new AuthError('Din konto har ikke adgang til AI-generering endnu.', 403)
   return { uid, email }
 }

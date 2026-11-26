@@ -1,6 +1,6 @@
 # Opgavebanken
 
-En søsterside til [AImforA](https://aimfora.com), hvor en lærer genererer matematikopgaver (1.–9. klasse) med AI, gemmer dem i en privat opgavebank og danner printklare opgavesæt med tre A4-PDF'er: elevark, rettevejledning og pointtabel.
+En søsterside til [AImforA](https://aimfora.com), hvor en lærer genererer matematikopgaver (1.–9. klasse) med AI, gemmer dem i en fælles opgavebank, som alle lærere kan bruge, og danner printklare opgavesæt med tre A4-PDF'er: elevark, rettevejledning og pointtabel.
 
 **Opsætning trin for trin:** [docs/OPSAETNING.md](docs/OPSAETNING.md)
 
@@ -10,7 +10,7 @@ En søsterside til [AImforA](https://aimfora.com), hvor en lærer genererer mate
 |---|---|
 | Frontend | Vite + React + TypeScript, AImforA's designsystem ("The Marking Desk") |
 | Login | Firebase Authentication (e-mail/adgangskode, Google) |
-| Data | Cloud Firestore, `users/{uid}/tasks`, `users/{uid}/sets` (øjebliksbilleder), `users/{uid}/meta/progression` |
+| Data | Cloud Firestore: `tasks` (fælles bank, `ownerUid`), `users/{uid}/sets` (private øjebliksbilleder), `users/{uid}/meta/progression` |
 | AI | OpenAI Responses API med Structured Outputs (strict JSON Schema), kun fra Netlify Functions |
 | PDF | pdf-lib + Liberation Sans i browseren (æøå, ², √, π, stablede brøker, vektorfigurer) |
 | Hosting | Netlify (statisk site + `/api/plan` og `/api/generate`) |
@@ -27,7 +27,7 @@ En søsterside til [AImforA](https://aimfora.com), hvor en lærer genererer mate
 src/shared/       domæne, validering, beregner, figurer, PDF – bruges af både browser og server
 src/client/       React-app (sider, komponenter, Firestore)
 netlify/functions plan.mts, generate.mts og _lib (auth, OpenAI, prompts, skemaer, test-AI)
-firestore.rules   adgang kun til egne data; sæt kan ikke ændres
+firestore.rules   fælles bank (kun ejeren retter), private sæt; sæt kan ikke ændres
 tests/            vitest: logik, serverfunktioner, PDF'er
 scripts/          e2e.mjs (Chrome), test-rules.mjs, local-api.ts
 ```
