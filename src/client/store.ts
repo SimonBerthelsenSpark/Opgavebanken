@@ -198,7 +198,6 @@ export async function recordLogin(user: {
 }): Promise<void> {
   const flag = `ob.login.${user.uid}`
   if (sessionStorage.getItem(flag)) return
-  sessionStorage.setItem(flag, '1')
   const now = Date.now()
   await setDoc(
     profileDoc(user.uid),
@@ -215,6 +214,8 @@ export async function recordLogin(user: {
     { merge: true },
   )
   await addDoc(collection(db, 'logins'), { uid: user.uid, email: user.email, at: now, device: device() })
+  // only after both writes succeeded, so a refused write is retried on the next page load
+  sessionStorage.setItem(flag, '1')
 }
 
 export function useProfiles() {
