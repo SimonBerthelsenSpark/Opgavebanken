@@ -3,19 +3,27 @@ import { auth } from './firebase'
 
 export class ApiError extends Error {}
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const user = auth.currentUser
-  if (!user) throw new ApiError('Du skal være logget ind.')
-  const token = await user.getIdToken()
-  let res: Response
+async function send(path: string, token: string, body: unknown): Promise<Response> {
   try {
-    res = await fetch(path, {
+    return await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
     })
   } catch {
     throw new ApiError('Ingen forbindelse til serveren.')
+  }
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const user = auth.currentUser
+  if (!user) throw new ApiError('Du skal være logget ind.')
+  let res = await send(path, await user.getIdToken(), body)
+  if (res.status === 403) {
+    // The login token is cached for up to an hour and may still say "e-mail not confirmed" after
+    // the teacher clicked the link. Fetch a fresh token once and try again.
+    await user.reload().catch(() => undefined)
+    res = await send(path, await user.getIdToken(true), body)
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new ApiError(data.error ?? `Serverfejl (${res.status}).`)
