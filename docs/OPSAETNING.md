@@ -97,7 +97,7 @@ Gratis og uden internet-konti: Firebase-emulatorer + test-AI. Sæt i `.env`:
 
 ## 7. Admin
 
-- Admin-menuen vises for e-mails i `ADMIN_EMAILS` i `src/shared/admin.ts` **og** i funktionen `isAdmin()` i `firestore.rules`. Ret begge steder, og publicér reglerne igen.
-- Admin kræver bekræftet e-mail. Siden viser brugere (oprettet, seneste login, antal logins, opgaver, sæt, AI-forbrug de sidste 7 dage), de seneste 100 logins og opgavebankens fordeling på klassetrin og område. Admin kan slette enhver opgave i banken.
+- Alle lærere med login kan se Admin-menuen. Kun e-mails i `ADMIN_EMAILS` (`src/shared/admin.ts`) og `isAdmin()` i `firestore.rules` kan slette andres opgaver. Ret begge steder, og publicér reglerne igen.
+- Siden viser brugere (oprettet, seneste login, antal logins, opgaver, sæt, AI-forbrug de sidste 7 dage), de seneste 100 logins og opgavebankens fordeling på klassetrin og område.
 - Profiler og logins registreres fra første login efter opdateringen. Ældre brugere vises som "Ukendt", til de logger ind igen.
 - AI-forbruget gemmes i Netlify Blobs (store `ai-guard`) og hentes via `/api/admin-stats`.

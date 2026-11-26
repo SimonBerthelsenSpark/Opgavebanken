@@ -1,14 +1,13 @@
 import type { Config } from '@netlify/functions'
-import { isAdminEmail, type UsageStats } from '../../src/shared/admin'
+import type { UsageStats } from '../../src/shared/admin'
 import { AuthError, requireUser } from './_lib/auth'
 import { kv } from './_lib/guard'
 import { json } from './_lib/http'
 
-/** AI usage per teacher for the last 14 days (admins only). */
+/** AI usage per teacher for the last 14 days (shown in the admin overview). */
 export default async (req: Request): Promise<Response> => {
   try {
-    const user = await requireUser(req)
-    if (!isAdminEmail(user.email, process.env.AUTH_EMULATOR === '1')) throw new AuthError('Kun for administratorer.', 403)
+    await requireUser(req) // every teacher with a confirmed e-mail may see the overview
     const store = kv()
     const days = Array.from({ length: 14 }, (_, i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10))
     const users: UsageStats['users'] = {}

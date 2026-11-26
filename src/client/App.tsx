@@ -63,7 +63,8 @@ export function App() {
 
   const uid = user.uid
   const admin = isAdminEmail(user.email, import.meta.env.MODE === 'e2e' || import.meta.env.VITE_USE_EMULATORS === '1')
-  const tabs = admin ? [...TABS, { path: '/admin', label: 'Admin' }] : TABS
+  // everyone can see the admin overview; only admins can delete other teachers' tasks
+  const tabs = [...TABS, { path: '/admin', label: 'Admin' }]
   let page: React.ReactNode
   let active = '/'
   if (path === '/generer') {
@@ -80,7 +81,7 @@ export function App() {
   } else if (path === '/progression') {
     page = <ProgressionPage uid={uid} />
     active = '/progression'
-  } else if (path === '/admin' && admin) {
+  } else if (path === '/admin') {
     page = <AdminPage uid={uid} />
     active = '/admin'
   } else page = <BankPage uid={uid} admin={admin} />
