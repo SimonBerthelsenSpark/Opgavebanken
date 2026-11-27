@@ -78,20 +78,26 @@ const setInput = async (selector, value) => {
   await page.keyboard.press('Backspace')
   await page.type(selector, value)
 }
+const handled = new Set()
 async function downloadAll(prefix) {
   const named = {}
-  for (const label of ['1. Elevens opgavesæt', '2. Rettevejledning', '3. Pointtabel']) {
-    const start = downloads.done.length
+  for (const [label, kind, start] of [
+    ['Elevens opgavesæt', 'elev', 'Elevark'],
+    ['Rettevejledning', 'laerer', 'Rettevejledning'],
+    ['Pointtabel', 'point', 'Pointtabel'],
+  ]) {
     await clickText(label)
-    for (let i = 0; i < 100 && downloads.done.length === start; i++) await sleep(250)
-    if (process.env.DEBUG) console.log('DL', label, JSON.stringify(downloads))
-    const guid = downloads.done[downloads.done.length - 1]
-    const name = downloads.names[guid] ?? ''
-    const kind = name.startsWith('Elevark') ? 'elev' : name.startsWith('Rettevejledning') ? 'laerer' : name.startsWith('Pointtabel') ? 'point' : 'ukendt'
+    // wait for a finished download with the expected name that we have not used yet
+    let guid
+    for (let i = 0; i < 120 && !guid; i++) {
+      guid = downloads.done.find((g) => !handled.has(g) && (downloads.names[g] ?? '').startsWith(start))
+      if (!guid) await sleep(250)
+    }
+    if (!guid) throw new Error(`PDF'en "${label}" blev ikke hentet`)
+    handled.add(guid)
     const to = `${OUT}/${prefix}-${kind}.pdf`
     renameSync(`${OUT}/${guid}`, to)
     named[kind] = execFileSync('pdftotext', ['-layout', to, '-']).toString()
-    named[`${kind}Name`] = name
   }
   return named
 }
@@ -265,7 +271,7 @@ try {
   const order = after.map(strip)
   await shot('03-saet-forhaandsvisning')
   await clickText('Godkend og gem sæt')
-  await waitText('Hent PDF (A4)')
+  await waitText('Download som PDF')
   const setUrl = page.url()
   const pdf = await downloadAll('manuel')
   check('Tre PDF’er hentet', Boolean(pdf.elev && pdf.laerer && pdf.point))
@@ -296,7 +302,7 @@ try {
   await clickText('Gem ændringer')
   await waitText('Opgaven er opdateret')
   await go(new URL(setUrl).pathname)
-  await waitText('Hent PDF (A4)')
+  await waitText('Download som PDF')
   const again = await downloadAll('genaabnet')
   check('Gemt sæt er et øjebliksbillede', again.laerer.includes('RETTET AF LÆRER') && !again.laerer.includes('NY VERSION'))
 
@@ -310,7 +316,7 @@ try {
   const rnd = await page.$$eval('.set-item h3', (h) => h.map((x) => x.textContent.replace(/^Opgave \d+: /, '')))
   check('Tilfældigt sæt med 4 forskellige opgaver uden AI-kald', rnd.length === 4 && new Set(rnd).size === 4 && api.length === apiBefore)
   await clickText('Godkend og gem sæt')
-  await waitText('Hent PDF (A4)')
+  await waitText('Download som PDF')
   const r = await downloadAll('tilfaeldigt')
   check('Tilfældigt sæt bruger samme PDF-eksport', labelsIn(r.point).length >= 4 && !/Facit/.test(r.elev))
 
@@ -371,10 +377,9 @@ try {
   // ---- quick set, side by side, differentiation, used count, variant
   await go('/')
   await setSelect('Klassetrin', '5')
-  await page.select('select[aria-label="Niveau for hurtigt sæt"]', '5')
-  await page.select('select[aria-label="Emne for hurtigt sæt"]', 'Areal')
+  await setSelect('Emne', 'Areal')
   await page.select('select[aria-label="Varighed"]', '20')
-  await clickText('Lav sættet')
+  await clickText('Lav sæt med ét klik')
   await waitText('Sammensat automatisk', 30000)
   const quick = await page.$eval('.summary', (e) => e.innerText)
   const quickMin = Number(/ca\. (\d+) minutter/.exec(quick)?.[1])
@@ -388,7 +393,7 @@ try {
   const easyTitles = await page.$$eval('.set-item h3', (h) => h.map((x) => x.textContent))
   check('Lettere udgave af sættet', easyTitles.length > 0 && easyTitles.every((t) => t.includes('(let)')), easyTitles[0])
   await clickText('Godkend og gem sæt')
-  await waitText('Hent PDF (A4)')
+  await waitText('Download som PDF')
   await go('/')
   await setSelect('Klassetrin', '')
   await sleep(300)

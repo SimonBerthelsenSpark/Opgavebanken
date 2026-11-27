@@ -149,7 +149,7 @@ export function SetDraftPage({ uid }: { uid: string }) {
 export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
   const [set, setSet] = useState<SavedSet | null | undefined>(undefined)
   const [view, setView] = useState<View>('student')
-  const [busy, setBusy] = useState<string | null>(null)
+  const [busy, setBusy] = useState<Kind | 'all' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState('')
 
@@ -163,9 +163,18 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
   if (set === undefined) return <p className="muted">Henter sæt …</p>
   if (set === null) return <p className="notice attention">Sættet findes ikke.</p>
 
-  const download = async (kind: 'elev' | 'laerer' | 'point') => {
+  const downloadAll = async () => {
     if (busy) return
-    setBusy(kind)
+    for (const d of DOCS) {
+      await download(d.kind, true)
+      await new Promise((r) => setTimeout(r, 400)) // browsers handle several downloads better spaced out
+    }
+    setBusy(null)
+  }
+
+  const download = async (kind: Kind, partOfAll = false) => {
+    if (busy && !partOfAll) return
+    setBusy(partOfAll ? 'all' : kind)
     setError(null)
     try {
       const s = { ...set, title: title.trim() || set.title }
@@ -177,7 +186,7 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
       console.error(e)
       setError('PDF’en kunne ikke dannes.')
     } finally {
-      setBusy(null)
+      if (!partOfAll) setBusy(null)
     }
   }
 
@@ -194,26 +203,37 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
         <span className="num">{set.tasks.length}</span> opgaver og <span className="num">{set.totalPoints}</span> point. Det ændrer sig
         ikke, selvom opgaverne senere rettes i banken.
       </p>
-      <section className="panel downloads" aria-label="Hent PDF">
-        <h2>Hent PDF (A4)</h2>
-        <div className="actions">
-          <button type="button" className="btn primary" onClick={() => download('elev')} disabled={Boolean(busy)}>
-            {busy === 'elev' ? 'Danner …' : '1. Elevens opgavesæt'}
+      <section className="downloads" aria-label="Download PDF">
+        <div className="downloads-head">
+          <h2>Download som PDF</h2>
+          <button type="button" className="btn primary" onClick={downloadAll} disabled={Boolean(busy)}>
+            <DownloadIcon /> {busy === 'all' ? 'Henter …' : 'Download alle tre'}
           </button>
-          <button type="button" className="btn outline" onClick={() => download('laerer')} disabled={Boolean(busy)}>
-            {busy === 'laerer' ? 'Danner …' : '2. Rettevejledning'}
-          </button>
-          <button type="button" className="btn outline" onClick={() => download('point')} disabled={Boolean(busy)}>
-            {busy === 'point' ? 'Danner …' : '3. Pointtabel'}
-          </button>
+        </div>
+        <div className="dl-grid">
+          {DOCS.map((d) => (
+            <button key={d.kind} type="button" className="dl-card" onClick={() => download(d.kind)} disabled={Boolean(busy)}>
+              <span className="dl-title">{d.title}</span>
+              <span className="dl-icon" aria-hidden="true">
+                <FileIcon accent={d.accent} />
+              </span>
+              <span className="dl-desc">{d.desc}</span>
+              <span className="dl-foot">
+                <span className="muted small">PDF · A4</span>
+                <span className="dl-action">
+                  <DownloadIcon /> {busy === d.kind ? 'Danner …' : 'Download'}
+                </span>
+              </span>
+            </button>
+          ))}
         </div>
         {error && (
           <p className="error" role="alert">
             {error}
           </p>
         )}
-        <label className="field">
-          <span className="field-label">Titel</span>
+        <label className="field title-edit">
+          <span className="field-label">Titel på sættet (står øverst i alle tre PDF’er)</span>
           <span className="inline">
             <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
             <button
@@ -323,5 +343,35 @@ function Differentiate({ uid, tasks, title, onDraft }: { uid: string; tasks: Tas
       )}
       <span className="sr-only">{title}</span>
     </div>
+  )
+}
+
+type Kind = 'elev' | 'laerer' | 'point'
+
+const DOCS: { kind: Kind; title: string; desc: string; accent: string }[] = [
+  { kind: 'elev', title: 'Elevens opgavesæt', desc: 'Opgaver, figurer og plads til besvarelse. Uden facit.', accent: '#1e2b3a' },
+  { kind: 'laerer', title: 'Rettevejledning', desc: 'Facit, løsningsforslag og kriterier for delpoint.', accent: '#2e6b4e' },
+  { kind: 'point', title: 'Pointtabel', desc: 'Én række pr. opgave med maks. point og felt til elevens point.', accent: '#eca53e' },
+]
+
+function DownloadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2v8M4.5 6.8 8 10.3l3.5-3.5M2.5 13.5h11" />
+    </svg>
+  )
+}
+
+function FileIcon({ accent }: { accent: string }) {
+  return (
+    <svg width="40" height="48" viewBox="0 0 40 48" aria-hidden="true">
+      <path d="M4 2h22l10 10v32a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" fill="#fff" stroke="#c5cbd2" strokeWidth="1.5" />
+      <path d="M26 2v8a2 2 0 0 0 2 2h8" fill="none" stroke="#c5cbd2" strokeWidth="1.5" />
+      <rect x="2" y="30" width="26" height="11" rx="2" fill={accent} />
+      <text x="15" y="38.5" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff" fontFamily="Arial, sans-serif">
+        PDF
+      </text>
+      <path d="M8 14h14M8 19h18M8 24h12" stroke="#dde1e6" strokeWidth="2" strokeLinecap="round" />
+    </svg>
   )
 }

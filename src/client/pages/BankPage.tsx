@@ -102,16 +102,6 @@ export function BankPage({
       )}
       {error && <p className="notice attention">Kunne ikke hente opgaverne: {error}</p>}
 
-      {tasks !== null && (
-        <QuickSet
-          uid={uid}
-          tasks={all}
-          reported={new Set(openReports.keys())}
-          preferred={preferred}
-          onDraft={(ids, origin, title, note) => openDraft(ids, origin, title, note)}
-        />
-      )}
-
       <section className="panel filters" aria-label="Filtre">
         <label className="field">
           <span className="field-label">Klassetrin</span>
@@ -204,6 +194,14 @@ export function BankPage({
           <button type="button" className="btn outline" onClick={randomSet} disabled={!all.length}>
             Dan tilfældigt sæt
           </button>
+          <span className="bar-sep" aria-hidden="true" />
+          <QuickSet
+            uid={uid}
+            tasks={all}
+            reported={new Set(openReports.keys())}
+            filters={filters}
+            onDraft={(ids, origin, title, note) => openDraft(ids, origin, title, note)}
+          />
           <button type="button" className="btn primary" disabled={!chosen.length} onClick={() => openDraft(chosen.map((t) => t.id), 'manual')}>
             Dan opgavesæt
           </button>
@@ -364,7 +362,7 @@ function BankRow(props: {
           <DifficultyBadge d={t.difficulty} />
         </td>
         <td className="r num">{taskPoints(t)}</td>
-        <td className="r num">{estMinutes(t)} min</td>
+        <td className="r num nowrap">{estMinutes(t)} min</td>
         <td>
           <button type="button" className="btn ghost xs" onClick={props.onOpen} aria-label={props.open ? 'Fold sammen' : 'Fold ud'}>
             {props.open ? '▴' : '▾'}
