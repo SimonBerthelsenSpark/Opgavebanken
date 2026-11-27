@@ -12,10 +12,13 @@ import {
   query,
   setDoc,
   updateDoc,
+  deleteField,
+  arrayRemove,
+  arrayUnion,
   writeBatch,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { type SavedSet, type Task, type TaskContent, taskPoints } from '../shared/domain'
+import { type SavedSet, type StudentSet, type Task, type TaskContent, taskPoints, toStudentSet } from '../shared/domain'
 import { DEFAULT_PROGRESSION, type Progression } from '../shared/progression'
 import { checkTask } from '../shared/validate'
 import { decodeTask, encodeTask } from '../shared/codec'
@@ -313,3 +316,109 @@ export function useMyProfile(uid: string) {
 
 export const setPreferredLevel = (uid: string, level: string) =>
   setDoc(profileDoc(uid), { uid, preferredLevel: level, onboarded: true }, { merge: true })
+
+// ---- digital student sets (public link without login, no answers)
+
+const sharedDoc = (token: string) => doc(db, 'shared', token)
+
+function newToken(): string {
+  const a = new Uint8Array(15)
+  crypto.getRandomValues(a)
+  return [...a].map((b) => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('')
+}
+
+/** Publishes the student view of a saved set and returns its token (reused if already shared). */
+export async function shareSet(uid: string, set: SavedSet): Promise<string> {
+  const token = set.shareToken ?? newToken()
+  const student = toStudentSet(set, uid)
+  await setDoc(sharedDoc(token), clean({ ...student, tasks: student.tasks.map(encodeTask) }))
+  if (!set.shareToken) await updateDoc(doc(setsCol(uid), set.id), { shareToken: token })
+  return token
+}
+
+export async function unshareSet(uid: string, set: SavedSet): Promise<void> {
+  if (!set.shareToken) return
+  await deleteDoc(sharedDoc(set.shareToken))
+  await updateDoc(doc(setsCol(uid), set.id), { shareToken: deleteField() })
+}
+
+/** Reads a shared student set; works without login. */
+export async function loadShared(token: string): Promise<StudentSet | null> {
+  const snap = await getDoc(sharedDoc(token))
+  if (!snap.exists()) return null
+  const v = snap.data() as StudentSet
+  return { ...v, tasks: v.tasks.map(decodeTask) }
+}
+
+// ---- the class's points for a saved set (private to the teacher)
+
+export interface ResultRow {
+  alias: string
+  scores: (number | null)[]
+}
+
+const resultsDoc = (uid: string, setId: string) => doc(db, 'users', uid, 'results', setId)
+
+export function useResults(uid: string, setId: string) {
+  const [rows, setRows] = useState<ResultRow[] | null>(null)
+  useEffect(
+    () =>
+      onSnapshot(
+        resultsDoc(uid, setId),
+        (snap) => setRows(snap.exists() ? ((snap.data() as { rows: ResultRow[] }).rows ?? []) : []),
+        () => setRows([]),
+      ),
+    [uid, setId],
+  )
+  return rows
+}
+
+export const saveResults = (uid: string, setId: string, rows: ResultRow[]) =>
+  setDoc(resultsDoc(uid, setId), { rows: clean(rows), updatedAt: Date.now() })
+
+// ---- favourites and the teacher's own collections (private)
+
+export interface Collection {
+  id: string
+  name: string
+  taskIds: string[]
+}
+export const FAVOURITES = 'favoritter'
+
+const collectionsCol = (uid: string) => collection(db, 'users', uid, 'collections')
+
+export function useCollections(uid: string) {
+  const [cols, setCols] = useState<Collection[]>([])
+  useEffect(
+    () =>
+      onSnapshot(
+        collectionsCol(uid),
+        (snap) => setCols(snap.docs.map((d) => ({ ...(d.data() as Omit<Collection, 'id'>), id: d.id }))),
+        () => setCols([]),
+      ),
+    [uid],
+  )
+  return cols
+}
+
+export async function setInCollection(uid: string, col: { id: string; name: string }, taskId: string, on: boolean) {
+  await setDoc(
+    doc(collectionsCol(uid), col.id),
+    { name: col.name, taskIds: on ? arrayUnion(taskId) : arrayRemove(taskId) },
+    { merge: true },
+  )
+}
+
+export async function createCollection(uid: string, name: string, taskId?: string): Promise<string> {
+  const ref = await addDoc(collectionsCol(uid), { name: name.trim().slice(0, 60), taskIds: taskId ? [taskId] : [] })
+  return ref.id
+}
+
+export const deleteCollection = (uid: string, id: string) => deleteDoc(doc(collectionsCol(uid), id))
+
+/** An editable copy of a colleague's task in your own name. */
+export async function copyTask(uid: string, t: Task): Promise<string> {
+  const { id: _id, ownerUid: _o, usedCount: _u, createdAt: _c, updatedAt: _up, issues: _i, verified: _v, editedByTeacher: _e, ...content } = t
+  const [newId] = await saveNewTasks(uid, [{ ...content, title: `${t.title} (min kopi)`.slice(0, 120), source: t.source === 'starter' ? 'ai' : t.source }])
+  return newId
+}

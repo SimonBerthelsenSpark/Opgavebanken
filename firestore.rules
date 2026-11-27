@@ -78,6 +78,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Digital student sets: anyone with the link can open one (no listing), without answers.
+    // Only the teacher who shared it can change or remove it.
+    match /shared/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.tasks is list
+        && request.resource.data.tasks.size() <= 60;
+      allow update: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+    }
+
     match /users/{uid} {
       allow read, write: if isOwner(uid);
 
@@ -99,6 +114,16 @@ service cloud.firestore {
       }
 
       match /meta/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Favourites and own collections of tasks
+      match /collections/{colId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // The class's points per saved set (students by number or initials)
+      match /results/{setId} {
         allow read, write: if isOwner(uid);
       }
     }

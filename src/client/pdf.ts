@@ -10,7 +10,7 @@ function loadFonts(): Promise<FontBytes> {
   return fonts
 }
 
-export const buildStudentPdf = async (s: SavedSet) => studentPdf(s, await loadFonts())
+export const buildStudentPdf = async (s: SavedSet, qrPng?: Uint8Array) => studentPdf(s, await loadFonts(), { qrPng })
 export const buildTeacherPdf = async (s: SavedSet) => teacherPdf(s, await loadFonts())
 export const buildPointTablePdf = async (s: SavedSet) => pointTablePdf(s, await loadFonts())
 

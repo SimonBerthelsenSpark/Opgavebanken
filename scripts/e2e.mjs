@@ -28,6 +28,7 @@ const browser = await puppeteer.launch({
 })
 const page = await browser.newPage()
 page.on('pageerror', (e) => console.log('PAGE ERROR', e.message))
+page.on('dialog', (d) => d.accept(d.type() === 'prompt' ? 'Terminsprøve 5. kl.' : undefined))
 const api = []
 page.on('request', (r) => {
   if (r.url().includes('/api/')) {
@@ -79,6 +80,17 @@ const setInput = async (selector, value) => {
   await page.type(selector, value)
 }
 const handled = new Set()
+async function downloadOne(buttonText, start, ext) {
+  await clickText(buttonText)
+  let guid
+  for (let i = 0; i < 160 && !guid; i++) {
+    guid = downloads.done.find((g) => !handled.has(g) && (downloads.names[g] ?? '').startsWith(start) && downloads.names[g].endsWith(ext))
+    if (!guid) await sleep(250)
+  }
+  if (!guid) throw new Error(`${start}${ext} blev ikke hentet`)
+  handled.add(guid)
+  return `${OUT}/${guid}`
+}
 async function downloadAll(prefix) {
   const named = {}
   for (const [label, kind, start] of [
@@ -198,6 +210,25 @@ try {
   check('Fejlmelding vises som “Fejl meldt” i banken', (await bodyText()).includes('Fejl meldt'))
   await page.evaluate(() => [...document.querySelectorAll('table.bank button.link.title')].find((b) => b.textContent === 'Kollegas brøkopgave').click())
 
+  // ---- favourites, collections and copying a colleague's task
+  await page.evaluate(() => [...document.querySelectorAll('table.bank tbody tr')].find((r) => r.textContent.includes('Kollegas brøkopgave')).querySelector('button.star').click())
+  await sleep(300)
+  await page.select('select[aria-label="Samling"]', 'favoritter')
+  await sleep(300)
+  const favRows = await page.$$eval('table.bank tbody tr', (r) => r.map((x) => x.textContent))
+  check('Favorit med stjerne og filter “Mine favoritter”', favRows.length === 1 && favRows[0].includes('Kollegas brøkopgave'))
+  await page.select('select[aria-label="Samling"]', '')
+  await page.evaluate(() => [...document.querySelectorAll('table.bank button.link.title')].find((b) => b.textContent === 'Kollegas brøkopgave').click())
+  await sleep(200)
+  await page.select('select[aria-label="Gem i samling"]', '__new')
+  await waitText('Ligger i: Terminsprøve 5. kl.')
+  check('Opgave kan lægges i en ny samling', true)
+  await clickText('Kopiér til mine opgaver')
+  await waitText('er kopieret til dine opgaver')
+  await sleep(300)
+  const copyRow = await page.evaluate(() => [...document.querySelectorAll('table.bank tbody tr')].map((r) => r.innerText).find((t) => t.includes('(min kopi)')) ?? '')
+  check('Kollegas opgave kan kopieres til en egen, redigerbar version', copyRow.includes('Kollegas brøkopgave (min kopi)') && !copyRow.includes('Kollega\t'), copyRow.split('\t')[1])
+
   // ---- a gymnasium task with a graph and notation
   await page.evaluate(() =>
     window.__addForeignTask({
@@ -271,7 +302,7 @@ try {
   const order = after.map(strip)
   await shot('03-saet-forhaandsvisning')
   await clickText('Godkend og gem sæt')
-  await waitText('Download som PDF')
+  await waitText('Download alle tre')
   const setUrl = page.url()
   const pdf = await downloadAll('manuel')
   check('Tre PDF’er hentet', Boolean(pdf.elev && pdf.laerer && pdf.point))
@@ -293,6 +324,42 @@ try {
   const headerTotal = Number(/i alt (\d+) point/.exec(pdf.elev)?.[1])
   check('Point stemmer på tværs', elevPts === total && guidePts === total && headerTotal === total, `elev=${elevPts}, vejledning=${guidePts}, tabel=${total}`)
 
+  // ---- share digitally with a QR code
+  await go(new URL(setUrl).pathname)
+  await clickText('Lav elevlink og QR-kode')
+  await page.waitForSelector('input[aria-label="Elevlink"]')
+  const link = await page.$eval('input[aria-label="Elevlink"]', (i) => i.value)
+  const hasQr = await page.$$eval('img[alt^="QR-kode"]', (i) => i.length)
+  await shot('11-del-digitalt')
+  const token = link.split('/elev/')[1]
+  await go(`/elev/${token}`)
+  await waitText('Skriv dine svar')
+  const studentText = await bodyText()
+  await shot('12-elevside')
+  check('Digitalt elevsæt via link og QR-kode, uden facit', hasQr > 0 && studentText.includes(order[0].slice(0, 20)) && !studentText.includes('RETTET AF LÆRER') && !/Facit|Løsningsforslag/.test(studentText), link)
+  await go(new URL(setUrl).pathname)
+  await waitText('Download alle tre')
+
+  // ---- Word export
+  const docx = await downloadOne('Word (.docx)', 'Elevark', '.docx')
+  const xml = execFileSync('unzip', ['-p', docx, 'word/document.xml']).toString()
+  check('Elevark som Word-fil med opgaverne', xml.includes(order[0].slice(0, 15)) && xml.includes('Navn') && !xml.includes('RETTET AF LÆRER'))
+
+  // ---- the class's points
+  await clickText('Indtast point')
+  await page.waitForSelector('input[aria-label="Elev 1 1a"]')
+  await page.type('input[aria-label="Elev 1 1a"]', '0')
+  await page.type('input[aria-label="Elev 2 1a"]', '1')
+  await page.type('input[aria-label="Elev 1 1b"]', '1')
+  await page.type('input[aria-label="Elev 2 1b"]', '1')
+  await waitText('Klassen havde svært ved')
+  const weak = await page.$eval('.results .notice', (e) => e.innerText)
+  await shot('13-klassens-point')
+  check('Klassens point viser de svære opgaver', weak.includes('1a (25 %)'), weak.split('\n')[0])
+  await clickText('Lav øvesæt med nye varianter')
+  await waitText('Øvesæt med nye varianter', 30000)
+  check('Øvesæt af de svære opgaver laves med ét klik', (await page.$$('.set-item')).length >= 1)
+
   // ---- snapshot: edit the task in the bank afterwards
   await go('/')
   await page.evaluate((t) => [...document.querySelectorAll('table.bank button.link.title')].find((b) => b.textContent === t).click(), firstTitle)
@@ -302,9 +369,10 @@ try {
   await clickText('Gem ændringer')
   await waitText('Opgaven er opdateret')
   await go(new URL(setUrl).pathname)
-  await waitText('Download som PDF')
+  await waitText('Download alle tre')
   const again = await downloadAll('genaabnet')
   check('Gemt sæt er et øjebliksbillede', again.laerer.includes('RETTET AF LÆRER') && !again.laerer.includes('NY VERSION'))
+  check('QR-kode til den digitale udgave står på elevarket', again.elev.includes('Digital udgave'))
 
   // ---- random set of 4 (no AI call)
   await go('/')
@@ -316,7 +384,7 @@ try {
   const rnd = await page.$$eval('.set-item h3', (h) => h.map((x) => x.textContent.replace(/^Opgave \d+: /, '')))
   check('Tilfældigt sæt med 4 forskellige opgaver uden AI-kald', rnd.length === 4 && new Set(rnd).size === 4 && api.length === apiBefore)
   await clickText('Godkend og gem sæt')
-  await waitText('Download som PDF')
+  await waitText('Download alle tre')
   const r = await downloadAll('tilfaeldigt')
   check('Tilfældigt sæt bruger samme PDF-eksport', labelsIn(r.point).length >= 4 && !/Facit/.test(r.elev))
 
@@ -393,7 +461,7 @@ try {
   const easyTitles = await page.$$eval('.set-item h3', (h) => h.map((x) => x.textContent))
   check('Lettere udgave af sættet', easyTitles.length > 0 && easyTitles.every((t) => t.includes('(let)')), easyTitles[0])
   await clickText('Godkend og gem sæt')
-  await waitText('Download som PDF')
+  await waitText('Download alle tre')
   await go('/')
   await setSelect('Klassetrin', '')
   await sleep(300)

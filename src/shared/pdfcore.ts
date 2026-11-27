@@ -1,6 +1,7 @@
 import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument, type PDFFont, type PDFPage, rgb } from 'pdf-lib'
-import { estMinutes, type SavedSet, type Task, partLabel, taskPoints } from './domain'
+import { estMinutes, pointRows, type SavedSet, type Task, partLabel, taskPoints } from './domain'
+export { pointRows } from './domain'
 import { layoutFigure } from './figure'
 import { levelLabel } from './levels'
 import { tokenizeMath } from './mathtext'
@@ -364,9 +365,16 @@ function nameFields(w: Writer, fields: [string, number][]) {
 }
 
 /** 1. The student sheet: no answers, no teacher notes. */
-export async function studentPdf(set: SavedSet, fonts: FontBytes): Promise<Uint8Array> {
+export async function studentPdf(set: SavedSet, fonts: FontBytes, opts: { qrPng?: Uint8Array } = {}): Promise<Uint8Array> {
   const w = await open(fonts, set.title)
   const total = set.tasks.reduce((s, t) => s + taskPoints(t), 0)
+  if (opts.qrPng) {
+    // QR code to the digital version, top right
+    const img = await w.pdf.embedPng(opts.qrPng)
+    const size = 62
+    w.page.drawImage(img, { x: A4[0] - M - size, y: A4[1] - M - size + 8, width: size, height: size })
+    w.text('Digital udgave', A4[0] - M - size / 2 - w.textWidth('Digital udgave', w.regular, 7) / 2, { size: 7, color: SOFT, y: A4[1] - M - size + 1 })
+  }
   header(w, set.title, '')
   nameFields(w, [
     ['Navn', 210],
@@ -485,18 +493,6 @@ export async function teacherPdf(set: SavedSet, fonts: FontBytes): Promise<Uint8
   })
   w.footer(set.title, 'Rettevejledning')
   return w.pdf.save()
-}
-
-export interface PointRow {
-  label: string
-  title: string
-  max: number
-}
-
-export function pointRows(set: SavedSet): PointRow[] {
-  return set.tasks.flatMap((t, i) =>
-    t.parts.map((p, j) => ({ label: partLabel(i + 1, j, t.parts.length), title: j === 0 ? t.title : '', max: p.points })),
-  )
 }
 
 /** 3. A printable point table: one row per task or sub-question, max points, empty score, total. */

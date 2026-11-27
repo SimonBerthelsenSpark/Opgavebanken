@@ -5,6 +5,8 @@ import { navigate } from '../App'
 import { GuideView, TaskMeta, TaskView } from '../components'
 import { ApiError } from '../api'
 import { generateVariants } from '../generation'
+import { qrPng, SharePanel, studentUrl } from '../SharePanel'
+import { ResultsPanel } from '../ResultsPanel'
 import { KEYS, type SetDraft, readSession, writeSession } from '../session'
 import { loadSet, renameSet, saveNewTasks, saveSet, useProgression, useTasks } from '../store'
 
@@ -149,7 +151,7 @@ export function SetDraftPage({ uid }: { uid: string }) {
 export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
   const [set, setSet] = useState<SavedSet | null | undefined>(undefined)
   const [view, setView] = useState<View>('student')
-  const [busy, setBusy] = useState<Kind | 'all' | null>(null)
+  const [busy, setBusy] = useState<Kind | 'all' | 'elev-word' | 'laerer-word' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState('')
 
@@ -162,6 +164,28 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
 
   if (set === undefined) return <p className="muted">Henter sæt …</p>
   if (set === null) return <p className="notice attention">Sættet findes ikke.</p>
+
+  const downloadWord = async (kind: 'elev' | 'laerer') => {
+    if (busy) return
+    setBusy(`${kind}-word`)
+    setError(null)
+    try {
+      const s = { ...set, title: title.trim() || set.title }
+      const { studentDocx, teacherDocx } = await import('../word')
+      const blob = kind === 'elev' ? await studentDocx(s) : await teacherDocx(s)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${kind === 'elev' ? 'Elevark' : 'Rettevejledning'} - ${s.title}.docx`.replace(/[·•–—]/g, '-').replace(/[\\/:*?"<>|]/g, '-')
+      document.body.append(a)
+      a.click()
+      a.remove()
+    } catch (e) {
+      console.error(e)
+      setError('Word-filen kunne ikke dannes.')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const downloadAll = async () => {
     if (busy) return
@@ -179,7 +203,7 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
     try {
       const s = { ...set, title: title.trim() || set.title }
       const { buildPointTablePdf, buildStudentPdf, buildTeacherPdf, downloadPdf } = await import('../pdf')
-      const bytes = kind === 'elev' ? await buildStudentPdf(s) : kind === 'laerer' ? await buildTeacherPdf(s) : await buildPointTablePdf(s)
+      const bytes = kind === 'elev' ? await buildStudentPdf(s, s.shareToken ? await qrPng(studentUrl(s.shareToken)) : undefined) : kind === 'laerer' ? await buildTeacherPdf(s) : await buildPointTablePdf(s)
       const prefix = kind === 'elev' ? 'Elevark' : kind === 'laerer' ? 'Rettevejledning' : 'Pointtabel'
       downloadPdf(bytes, `${prefix} - ${s.title}.pdf`)
     } catch (e) {
@@ -205,26 +229,34 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
       </p>
       <section className="downloads" aria-label="Download PDF">
         <div className="downloads-head">
-          <h2>Download som PDF</h2>
+          <h2>Download</h2>
           <button type="button" className="btn primary" onClick={downloadAll} disabled={Boolean(busy)}>
             <DownloadIcon /> {busy === 'all' ? 'Henter …' : 'Download alle tre'}
           </button>
         </div>
         <div className="dl-grid">
           {DOCS.map((d) => (
-            <button key={d.kind} type="button" className="dl-card" onClick={() => download(d.kind)} disabled={Boolean(busy)}>
-              <span className="dl-title">{d.title}</span>
-              <span className="dl-icon" aria-hidden="true">
-                <FileIcon accent={d.accent} />
-              </span>
-              <span className="dl-desc">{d.desc}</span>
-              <span className="dl-foot">
-                <span className="muted small">PDF · A4</span>
-                <span className="dl-action">
-                  <DownloadIcon /> {busy === d.kind ? 'Danner …' : 'Download'}
+            <div key={d.kind} className="dl-card">
+              <button type="button" className="dl-main" onClick={() => download(d.kind)} disabled={Boolean(busy)}>
+                <span className="dl-title">{d.title}</span>
+                <span className="dl-icon" aria-hidden="true">
+                  <FileIcon accent={d.accent} />
                 </span>
+                <span className="dl-desc">{d.desc}</span>
+              </button>
+              <span className="dl-foot">
+                {d.kind !== 'point' ? (
+                  <button type="button" className="link dl-word" onClick={() => downloadWord(d.kind as 'elev' | 'laerer')} disabled={Boolean(busy)}>
+                    {busy === `${d.kind}-word` ? 'Danner …' : 'Word (.docx)'}
+                  </button>
+                ) : (
+                  <span className="muted small">PDF · A4</span>
+                )}
+                <button type="button" className="dl-action" onClick={() => download(d.kind)} disabled={Boolean(busy)} aria-label={`Download ${d.title} som PDF`}>
+                  <DownloadIcon /> {busy === d.kind ? 'Danner …' : 'PDF'}
+                </button>
               </span>
-            </button>
+            </div>
           ))}
         </div>
         {error && (
@@ -232,6 +264,7 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
             {error}
           </p>
         )}
+        <SharePanel uid={uid} set={set} onChange={setSet} />
         <label className="field title-edit">
           <span className="field-label">Titel på sættet (står øverst i alle tre PDF’er)</span>
           <span className="inline">
@@ -250,6 +283,14 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
           </span>
         </label>
       </section>
+      <ResultsPanel
+        uid={uid}
+        set={set}
+        onPractice={(ids, title) => {
+          writeSession(KEYS.draft, { title, taskIds: ids, origin: 'variant', titleTouched: true, note: 'Øvesæt med nye varianter af de opgaver, klassen havde svært ved. De er gemt i banken.' })
+          navigate('/saet/ny')
+        }}
+      />
       <div className="toolbar">
         <ViewToggle view={view} onChange={setView} />
       </div>

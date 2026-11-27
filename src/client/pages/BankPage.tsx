@@ -7,7 +7,22 @@ import { DifficultyBadge, IssueList, QualityBadges, TaskEditor, TaskView } from 
 import { QuickSet } from '../QuickSet'
 import { VariantBox } from '../VariantBox'
 import { KEYS, type SetDraft, readSession, useSessionState, writeSession } from '../session'
-import { deleteTask, type Report, reportTask, resolveReport, updateTask, useReports, useTasks } from '../store'
+import {
+  type Collection,
+  copyTask,
+  createCollection,
+  deleteCollection,
+  deleteTask,
+  FAVOURITES,
+  type Report,
+  reportTask,
+  resolveReport,
+  setInCollection,
+  updateTask,
+  useCollections,
+  useReports,
+  useTasks,
+} from '../store'
 
 export function BankPage({
   uid,
@@ -38,12 +53,16 @@ export function BankPage({
   const byId = useMemo(() => new Map(all.map((t) => [t.id, t])), [all])
   const [onlyMine, setOnlyMine] = useSessionState<boolean>('ob.onlyMine', false)
   const [sort, setSort] = useSessionState<'new' | 'used' | 'level'>('ob.sort', 'new')
+  const collections = useCollections(uid)
+  const [colFilter, setColFilter] = useSessionState<string>('ob.collection', '')
+  const favIds = new Set(collections.find((c) => c.id === FAVOURITES)?.taskIds ?? [])
+  const colIds = colFilter ? new Set(collections.find((c) => c.id === colFilter)?.taskIds ?? []) : null
   const visible = useMemo(() => {
-    const list = all.filter((t) => matches(t, filters) && (!onlyMine || t.ownerUid === uid))
+    const list = all.filter((t) => matches(t, filters) && (!onlyMine || t.ownerUid === uid) && (!colIds || colIds.has(t.id)))
     if (sort === 'used') return [...list].sort((a, b) => (b.usedCount ?? 0) - (a.usedCount ?? 0) || b.createdAt - a.createdAt)
     if (sort === 'level') return [...list].sort((a, b) => a.grade - b.grade || (a.niveau ?? '').localeCompare(b.niveau ?? '') || a.topic.localeCompare(b.topic, 'da'))
     return list
-  }, [all, filters, onlyMine, uid, sort])
+  }, [all, filters, onlyMine, uid, sort, colFilter, collections])
   // the first time per session, the bank opens on the teacher's own level
   useEffect(() => {
     if (preferred && !sessionStorage.getItem('ob.levelApplied')) {
@@ -153,16 +172,44 @@ export function BankPage({
             <option value="level">Klassetrin og emne</option>
           </select>
         </label>
+        <label className="field">
+          <span className="field-label">Samling</span>
+          <select value={colFilter} onChange={(e) => setColFilter(e.target.value)} aria-label="Samling">
+            <option value="">Alle opgaver</option>
+            <option value={FAVOURITES}>★ Mine favoritter</option>
+            {collections
+              .filter((c) => c.id !== FAVOURITES)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.taskIds.length})
+                </option>
+              ))}
+          </select>
+        </label>
+        {colFilter && colFilter !== FAVOURITES && (
+          <button
+            type="button"
+            className="link"
+            onClick={async () => {
+              if (!confirm('Slet samlingen? Opgaverne bliver i banken.')) return
+              await deleteCollection(uid, colFilter)
+              setColFilter('')
+            }}
+          >
+            Slet samling
+          </button>
+        )}
         <label className="inline mine">
           <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> Kun mine opgaver
         </label>
         <button
           type="button"
           className="btn outline"
-          disabled={!filtersActive(filters) && !onlyMine}
+          disabled={!filtersActive(filters) && !onlyMine && !colFilter}
           onClick={() => {
             setFilters(EMPTY_FILTERS)
             setOnlyMine(false)
+            setColFilter('')
           }}
         >
           Nulstil filtre
@@ -302,6 +349,13 @@ export function BankPage({
                   reports={openReports.get(t.id) ?? []}
                   uid={uid}
                   onReport={(message) => reportTask({ uid, email }, t, message)}
+                  favourite={favIds.has(t.id)}
+                  onFavourite={() => setInCollection(uid, { id: FAVOURITES, name: 'Favoritter' }, t.id, !favIds.has(t.id))}
+                  collections={collections}
+                  onCopy={async () => {
+                    await copyTask(uid, t)
+                    setFlash(`"${t.title}" er kopieret til dine opgaver. Du finder kopien øverst i banken og kan rette i den.`)
+                  }}
                 />
               ))}
             </tbody>
@@ -332,6 +386,10 @@ function BankRow(props: {
   reports: Report[]
   uid: string
   onReport: (message: string) => Promise<void>
+  favourite: boolean
+  onFavourite: () => void
+  collections: Collection[]
+  onCopy: () => Promise<void>
 }) {
   const { task: t } = props
   const flagged = t.issues?.some((i) => i.level === 'error')
@@ -342,6 +400,16 @@ function BankRow(props: {
           <input type="checkbox" checked={props.checked} onChange={props.onToggle} aria-label={`Vælg ${t.title}`} />
         </td>
         <td>
+          <button
+            type="button"
+            className={`star${props.favourite ? ' on' : ''}`}
+            onClick={props.onFavourite}
+            aria-pressed={props.favourite}
+            aria-label={props.favourite ? `Fjern ${t.title} fra favoritter` : `Gør ${t.title} til favorit`}
+            title={props.favourite ? 'Fjern fra favoritter' : 'Gør til favorit'}
+          >
+            {props.favourite ? '★' : '☆'}
+          </button>
           <button type="button" className="link title" onClick={props.onOpen} aria-expanded={props.open}>
             {t.title}
           </button>
@@ -380,6 +448,7 @@ function BankRow(props: {
                 <IssueList issues={t.issues ?? []} />
                 <ReportList reports={props.reports} canResolve={props.mine || props.admin} uid={props.uid} />
                 <TaskView task={t} showGuide verified={t.verified} />
+                <CollectionPicker uid={props.uid} taskId={t.id} collections={props.collections} />
                 <VariantBox uid={props.uid} task={t} />
                 <ReportForm onReport={props.onReport} />
                 {props.mine ? (
@@ -394,6 +463,9 @@ function BankRow(props: {
                 ) : (
                   <div className="actions">
                     <p className="hint">Opgaven er lavet af en kollega. Du kan bruge den i dine sæt, men kun kollegaen kan rette eller slette den.</p>
+                    <button type="button" className="btn outline sm" onClick={props.onCopy}>
+                      Kopiér til mine opgaver
+                    </button>
                     {props.admin && (
                       <button type="button" className="btn ghost sm danger" onClick={props.onDelete}>
                         Slet (admin)
@@ -487,5 +559,43 @@ function ReportForm({ onReport }: { onReport: (message: string) => Promise<void>
         </button>
       </div>
     </form>
+  )
+}
+
+/** Put a task in one of your own collections (or a new one). */
+function CollectionPicker({ uid, taskId, collections }: { uid: string; taskId: string; collections: Collection[] }) {
+  const mine = collections.filter((c) => c.id !== FAVOURITES)
+  const inCols = mine.filter((c) => c.taskIds.includes(taskId))
+  return (
+    <div className="actions">
+      <label className="inline">
+        Gem i samling
+        <select
+          value=""
+          aria-label="Gem i samling"
+          onChange={async (e) => {
+            const v = e.target.value
+            e.target.value = ''
+            if (v === '__new') {
+              const name = prompt('Navn på den nye samling, fx “Terminsprøve 9. kl.”')
+              if (name?.trim()) await createCollection(uid, name, taskId)
+            } else if (v) {
+              const c = mine.find((x) => x.id === v)
+              if (c) await setInCollection(uid, c, taskId, !c.taskIds.includes(taskId))
+            }
+          }}
+        >
+          <option value="">Vælg …</option>
+          {mine.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.taskIds.includes(taskId) ? '✓ ' : ''}
+              {c.name}
+            </option>
+          ))}
+          <option value="__new">+ Ny samling …</option>
+        </select>
+      </label>
+      {inCols.length > 0 && <span className="hint">Ligger i: {inCols.map((c) => c.name).join(', ')}</span>}
+    </div>
   )
 }

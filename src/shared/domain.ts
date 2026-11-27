@@ -132,6 +132,8 @@ export interface SavedSet {
   createdAt: number
   tasks: Task[]
   totalPoints: number
+  /** Token of the public student link (/elev/<token>), when the set is shared digitally. */
+  shareToken?: string
 }
 
 export const taskPoints = (t: Pick<TaskContent, 'parts'>) => t.parts.reduce((s, p) => s + p.points, 0)
@@ -204,4 +206,56 @@ export function estMinutes(t: Pick<TaskContent, 'parts' | 'grade'> & { minutes?:
   if (t.minutes) return t.minutes
   const perPoint = t.grade >= 10 ? 4 : t.grade >= 7 ? 3 : 2.5
   return Math.max(2, Math.round(taskPoints(t) * perPoint))
+}
+
+export interface PointRow {
+  label: string
+  title: string
+  max: number
+}
+
+/** One row per task or sub-question, numbered as in all three PDFs. */
+export function pointRows(set: Pick<SavedSet, 'tasks'>): PointRow[] {
+  return set.tasks.flatMap((t, i) =>
+    t.parts.map((p, j) => ({ label: partLabel(i + 1, j, t.parts.length), title: j === 0 ? t.title : '', max: p.points })),
+  )
+}
+
+/** What students may see of a set: no answers, solutions, criteria or checks. */
+export interface StudentTask {
+  title: string
+  intro: string
+  figure: Figure | null
+  parts: { question: string; points: number }[]
+  grade: number
+  niveau?: 'A' | 'B' | 'C' | null
+}
+
+export interface StudentSet {
+  title: string
+  ownerUid: string
+  setId: string
+  createdAt: number
+  totalPoints: number
+  minutes: number
+  tasks: StudentTask[]
+}
+
+export function toStudentSet(set: SavedSet, ownerUid: string): StudentSet {
+  return {
+    title: set.title,
+    ownerUid,
+    setId: set.id,
+    createdAt: Date.now(),
+    totalPoints: set.tasks.reduce((s, t) => s + taskPoints(t), 0),
+    minutes: set.tasks.reduce((m, t) => m + estMinutes(t), 0),
+    tasks: set.tasks.map((t) => ({
+      title: t.title,
+      intro: t.intro,
+      figure: t.figure ?? null,
+      parts: t.parts.map((p) => ({ question: p.question, points: p.points })),
+      grade: t.grade,
+      niveau: t.niveau ?? null,
+    })),
+  }
 }

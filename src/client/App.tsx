@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { auth, firebaseConfigured } from './firebase'
 import { migratePrivateTasks, recordLogin, useMyProfile } from './store'
 import { WelcomePage } from './pages/WelcomePage'
+import { StudentPage } from './pages/StudentPage'
 import { levelOf } from '../shared/levels'
 import { isAdminEmail } from '../shared/admin'
 import { AdminPage } from './pages/AdminPage'
@@ -52,6 +53,8 @@ export function App() {
     [],
   )
 
+  // the student view is public: no login
+  if (path.startsWith('/elev/')) return <StudentPage token={decodeURIComponent(path.slice(6))} />
   if (!firebaseConfigured)
     return (
       <main className="page narrow">

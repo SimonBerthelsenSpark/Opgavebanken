@@ -217,9 +217,12 @@ details summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); marg
 .downloads-head h2 { margin: 0; }
 .dl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 767px) { .dl-grid { grid-template-columns: 1fr; } }
+.dl-card { display: flex; flex-direction: column; }
+.dl-main {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'title icon' 'desc icon'; flex: 1;
+  gap: 6px 12px; text-align: left; font: inherit; color: var(--ink); cursor: pointer; background: none; border: 0; padding: 0;
+}
 .dl-card {
-  display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'title icon' 'desc icon' 'foot foot';
-  gap: 6px 12px; text-align: left; font: inherit; color: var(--ink); cursor: pointer;
   background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04); transition: border-color .12s, box-shadow .12s, transform .12s;
 }
@@ -230,7 +233,9 @@ details summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); marg
 .dl-desc { grid-area: desc; font-size: 13px; color: var(--ink-soft); line-height: 1.45; }
 .dl-foot { grid-area: foot; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 6px; }
 .dl-action { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; color: var(--ink); }
-.dl-card:hover .dl-action { text-decoration: underline; text-underline-offset: 3px; }
+.dl-action { background: none; border: 0; cursor: pointer; padding: 4px 0; }
+.dl-card:hover .dl-action, .dl-action:hover { text-decoration: underline; text-underline-offset: 3px; }
+.dl-word { margin: 0; font-size: 13px; color: var(--ink-soft); }
 .btn svg { flex: none; }
 .title-edit { margin-top: 16px; max-width: 560px; }
 .title-edit .inline { width: 100%; }
@@ -280,3 +285,34 @@ details summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); marg
 .nowrap { white-space: nowrap; }
 .bar-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
 .bar-note { flex-basis: 100%; text-align: right; font-size: 13px; }
+
+.student { max-width: 860px; }
+.student h1 { margin-bottom: 6px; }
+.student-task { font-size: 17px; margin: 0 0 6px; }
+.student .part-q { font-size: 16px; }
+.share { display: grid; grid-template-columns: auto 1fr; gap: 16px 20px; align-items: start; }
+.share img { width: 132px; height: 132px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.share-link { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.share-link input { flex: 1; min-width: 220px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.qr-overlay { position: fixed; inset: 0; background: rgb(255 255 255 / 0.97); z-index: 50; display: grid; place-items: center; text-align: center; padding: 24px; }
+.qr-overlay img { width: min(70vh, 80vw); height: auto; image-rendering: pixelated; }
+.qr-overlay p { font-size: clamp(18px, 3vw, 32px); font-weight: 600; margin: 12px 0 0; word-break: break-all; }
+@media print {
+  .no-print, .topbar, .tabs, .selection-bar { display: none !important; }
+  body { background: #fff; }
+  .panel { border: 0; padding: 0; }
+  .set-item { break-inside: avoid; }
+}
+
+.results { margin: 12px 0; }
+.results-table input.score { width: 52px; min-height: 30px; padding: 3px 6px; text-align: right; }
+.results-table input.alias { width: 120px; min-height: 30px; padding: 3px 8px; }
+.results-table input.over { border-color: var(--pen); background: var(--pen-soft); }
+.results-table tfoot td, .results-table tfoot th { background: var(--paper); font-weight: 600; border-top: 1px solid var(--line-strong); padding: 8px 12px; }
+.results-table td.weak { color: var(--pen); }
+.results-table td { padding: 4px 6px; }
+
+.star { background: none; border: 0; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 6px 0 0; color: var(--line-strong); vertical-align: -1px; }
+.star:hover { color: var(--saffron-ink); }
+.star.on { color: var(--saffron); }
+.downloads > .panel { margin-top: 12px; }

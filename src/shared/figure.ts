@@ -358,3 +358,23 @@ function graphProblems(fig: Figure, ax: Axes): string[] {
   })
   return p
 }
+
+/** The figure as a standalone SVG string (used for the Word export, rasterised in the browser). */
+export function figureSvg(fig: Figure, maxW: number, maxH: number, fontSize = 13): { svg: string; width: number; height: number } {
+  const l = layoutFigure(fig, maxW, maxH, fontSize)
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const parts = l.prims.map((p) => {
+    if (p.k === 'gridline') return `<line x1="${p.x1}" y1="${p.y1}" x2="${p.x2}" y2="${p.y2}" stroke="#c5cbd2" stroke-width="0.7"/>`
+    if (p.k === 'poly')
+      return `<polyline points="${[...p.pts, ...(p.closed ? [p.pts[0]] : [])].map((q) => q.join(',')).join(' ')}" fill="none" stroke="#1e2b3a" stroke-width="${p.weight}"${p.dashed ? ' stroke-dasharray="5 4"' : ''} stroke-linejoin="round"/>`
+    if (p.k === 'circle')
+      return `<circle cx="${p.cx}" cy="${p.cy}" r="${p.r}" fill="none" stroke="#1e2b3a" stroke-width="1.4"${p.dashed ? ' stroke-dasharray="5 4"' : ''}/>`
+    if (p.k === 'dot') return `<circle cx="${p.cx}" cy="${p.cy}" r="3" fill="#1e2b3a"/>`
+    return `<text x="${p.x}" y="${p.y}" text-anchor="${p.anchor}" font-size="${l.fontSize}" font-family="Arial, sans-serif" fill="#1e2b3a">${esc(p.s)}</text>`
+  })
+  return {
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${l.width}" height="${l.height}" viewBox="0 0 ${l.width} ${l.height}"><rect width="100%" height="100%" fill="#fff"/>${parts.join('')}</svg>`,
+    width: l.width,
+    height: l.height,
+  }
+}

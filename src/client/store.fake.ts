@@ -4,7 +4,7 @@
  * snapshot copy for saved sets. Never part of a production build.
  */
 import { useEffect, useState } from 'react'
-import { type SavedSet, type Task, type TaskContent, taskPoints } from '../shared/domain'
+import { type SavedSet, type StudentSet, type Task, type TaskContent, taskPoints, toStudentSet } from '../shared/domain'
 import { DEFAULT_PROGRESSION, type Progression } from '../shared/progression'
 import { checkTask } from '../shared/validate'
 import { decodeTask, encodeTask, hasNestedArray } from '../shared/codec'
@@ -19,6 +19,9 @@ const db = {
   profiles: new Map<string, Record<string, unknown>>(),
   logins: [] as Record<string, unknown>[],
   reports: [] as Record<string, unknown>[],
+  shared: new Map<string, Record<string, unknown>>(),
+  results: new Map<string, unknown>(),
+  collections: new Map<string, { name: string; taskIds: string[] }>(),
   tasks: new Map<string, Task>(),
   sets: new Map<string, SavedSet>(),
   progression: null as Progression | null,
@@ -177,4 +180,69 @@ export function useMyProfile(uid: string) {
 export async function setPreferredLevel(uid: string, level: string) {
   db.profiles.set(uid, { ...(db.profiles.get(uid) ?? {}), uid, preferredLevel: level, onboarded: true })
   emit()
+}
+
+export async function shareSet(uid: string, set: SavedSet) {
+  const token = set.shareToken ?? `t${id()}`
+  const student = toStudentSet(set, uid)
+  db.shared.set(token, write({ ...student, tasks: student.tasks.map(encodeTask) }))
+  const s = db.sets.get(set.id)
+  if (s) s.shareToken = token
+  emit()
+  return token
+}
+
+export async function unshareSet(_uid: string, set: SavedSet) {
+  if (set.shareToken) db.shared.delete(set.shareToken)
+  const s = db.sets.get(set.id)
+  if (s) delete s.shareToken
+  emit()
+}
+
+export async function loadShared(token: string) {
+  const v = db.shared.get(token) as StudentSet | undefined
+  return v ? ({ ...clone(v), tasks: v.tasks.map((t) => decodeTask(clone(t))) } as StudentSet) : null
+}
+
+export type { ResultRow } from './store'
+
+export function useResults(_uid: string, setId: string) {
+  return useLive(() => clone((db.results.get(setId) as never) ?? [])) as never
+}
+
+export async function saveResults(_uid: string, setId: string, rows: unknown[]) {
+  db.results.set(setId, write(rows))
+  emit()
+}
+
+export type { Collection } from './store'
+export const FAVOURITES = 'favoritter'
+
+export function useCollections(_uid: string) {
+  return useLive(() => [...db.collections.entries()].map(([cid, c]) => ({ id: cid, ...clone(c) }))) as never
+}
+
+export async function setInCollection(_uid: string, col: { id: string; name: string }, taskId: string, on: boolean) {
+  const c = db.collections.get(col.id) ?? { name: col.name, taskIds: [] }
+  c.taskIds = on ? [...new Set([...c.taskIds, taskId])] : c.taskIds.filter((x) => x !== taskId)
+  db.collections.set(col.id, c)
+  emit()
+}
+
+export async function createCollection(_uid: string, name: string, taskId?: string) {
+  const cid = id()
+  db.collections.set(cid, { name, taskIds: taskId ? [taskId] : [] })
+  emit()
+  return cid
+}
+
+export async function deleteCollection(_uid: string, cid: string) {
+  db.collections.delete(cid)
+  emit()
+}
+
+export async function copyTask(uid: string, t: Task) {
+  const { id: _id, ownerUid: _o, usedCount: _u, createdAt: _c, updatedAt: _up, issues: _i, verified: _v, editedByTeacher: _e, ...content } = t
+  const [newId] = await saveNewTasks(uid, [{ ...content, title: `${t.title} (min kopi)`, source: t.source === 'starter' ? 'ai' : t.source }])
+  return newId
 }
