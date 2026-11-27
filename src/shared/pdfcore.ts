@@ -27,16 +27,23 @@ const BAND = rgb(0.95, 0.955, 0.965)
 const SUP_PLAIN: Record<string, string> = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-' }
 const REPLACE: [RegExp, string][] = [
   [/∠/g, 'vinkel '],
+  [/⇒/g, '=>'],
+  [/⇔/g, '<=>'],
+  [/∈/g, ' i '],
+  [/⊥/g, ' vinkelret på '],
+  [/∥/g, ' parallel med '],
+  [/ℝ/g, 'R'],
   [/△/g, 'trekant '],
   [/[   ]/g, ' '],
   [/\t/g, '  '],
 ]
 
-type Seg = { s: string; sup: boolean }
+/** A piece of a word: normal, raised (power), lowered (index) or a vector (arrow above). */
+type Seg = { s: string; sup: boolean; sub?: boolean; vec?: boolean }
 type Run =
   | { t: 'word'; segs: Seg[]; font: PDFFont; size: number; w: number }
   | { t: 'space'; w: number }
-  | { t: 'frac'; num: string; den: string; font: PDFFont; size: number; w: number }
+  | { t: 'frac'; num: string; den: string; font: PDFFont; size: number; w: number; binom?: boolean }
   | { t: 'br' }
 interface Line {
   runs: Run[]
@@ -83,14 +90,14 @@ class Writer {
       else if (SUP_PLAIN[ch]) piece = { s: SUP_PLAIN[ch], sup: true }
       else piece = { s: '?', sup: false }
       const last = segs[segs.length - 1]
-      if (last && last.sup === piece.sup) last.s += piece.s
+      if (last && last.sup === piece.sup && !last.sub && !last.vec) last.s += piece.s
       else segs.push(piece)
     }
     return segs
   }
 
   segWidth(segs: Seg[], font: PDFFont, size: number) {
-    return segs.reduce((w, g) => w + font.widthOfTextAtSize(g.s, g.sup ? size * 0.65 : size), 0)
+    return segs.reduce((w, g) => w + font.widthOfTextAtSize(g.s, g.sup || g.sub ? size * 0.65 : size), 0)
   }
 
   textWidth(s: string, font: PDFFont, size: number) {
@@ -100,11 +107,25 @@ class Writer {
   /** Break text with fractions into lines of at most maxW. */
   layout(text: string, font: PDFFont, size: number, maxW: number): Line[] {
     const runs: Run[] = []
+    let glue = false // the previous token ended without a space, so a power or index attaches to it
     for (const tok of tokenizeMath(text)) {
-      if (tok.t === 'frac') {
+      if (tok.t === 'frac' || tok.t === 'binom') {
         const fs = size * 0.8
-        const w = Math.max(this.textWidth(tok.num, font, fs), this.textWidth(tok.den, font, fs)) + 3
-        runs.push({ t: 'frac', num: tok.num, den: tok.den, font, size, w })
+        const [a, b] = tok.t === 'frac' ? [tok.num, tok.den] : [tok.n, tok.k]
+        const inner = Math.max(this.textWidth(a, font, fs), this.textWidth(b, font, fs)) + 3
+        const paren = tok.t === 'binom' ? font.widthOfTextAtSize('(', size * 1.6) * 2 : 0
+        runs.push({ t: 'frac', num: a, den: b, font, size, w: inner + paren, binom: tok.t === 'binom' })
+        glue = true
+        continue
+      }
+      if (tok.t === 'sup' || tok.t === 'sub' || tok.t === 'vec') {
+        const segs = this.clean(tok.s).map((g) => ({ ...g, sup: tok.t === 'sup' || g.sup, sub: tok.t === 'sub', vec: tok.t === 'vec' }))
+        const prev = runs[runs.length - 1]
+        if (glue && prev?.t === 'word') {
+          prev.segs.push(...segs)
+          prev.w = this.segWidth(prev.segs, font, size)
+        } else runs.push({ t: 'word', segs, font, size, w: this.segWidth(segs, font, size) })
+        glue = true
         continue
       }
       for (const piece of tok.s.split(/(\n| +)/)) {
@@ -113,9 +134,15 @@ class Writer {
         else if (/^ +$/.test(piece)) runs.push({ t: 'space', w: font.widthOfTextAtSize(' ', size) * piece.length })
         else {
           const segs = this.clean(piece)
-          runs.push({ t: 'word', segs, font, size, w: this.segWidth(segs, font, size) })
+          const prev = runs[runs.length - 1]
+          if (glue && prev?.t === 'word' && piece === tok.s.split(/(\n| +)/).find(Boolean)) {
+            // text right after a power or index, e.g. "x²y" or "a₁b"
+            prev.segs.push(...segs)
+            prev.w = this.segWidth(prev.segs, font, size)
+          } else runs.push({ t: 'word', segs, font, size, w: this.segWidth(segs, font, size) })
         }
       }
+      glue = !/[\s]$/.test(tok.s)
     }
     const lines: Line[] = []
     let cur: Run[] = []
@@ -155,19 +182,22 @@ class Writer {
       for (const r of line.runs) {
         if (r.t === 'space') cx += r.w
         else if (r.t === 'word') {
-          for (const g of r.segs) {
-            const fs = g.sup ? r.size * 0.65 : r.size
-            this.page.drawText(g.s, { x: cx, y: base + (g.sup ? r.size * 0.38 : 0), size: fs, font: r.font, color })
-            cx += r.font.widthOfTextAtSize(g.s, fs)
-          }
+          cx = this.drawSegs(r.segs, cx, base, r.font, r.size, color)
         } else if (r.t === 'frac') {
           const fs = r.size * 0.8
           const bar = base + r.size * 0.3
+          const pw = r.binom ? r.font.widthOfTextAtSize('(', r.size * 1.6) : 0
+          const inner = r.w - 2 * pw
+          if (r.binom) {
+            this.page.drawText('(', { x: cx, y: base - r.size * 0.35, size: r.size * 1.6, font: r.font, color })
+            this.page.drawText(')', { x: cx + pw + inner, y: base - r.size * 0.35, size: r.size * 1.6, font: r.font, color })
+          }
+          const ix = cx + pw
           const nw = this.textWidth(r.num, r.font, fs)
           const dw = this.textWidth(r.den, r.font, fs)
-          this.drawSegs(this.clean(r.num), cx + (r.w - nw) / 2, bar + 2.2, r.font, fs, color)
-          this.drawSegs(this.clean(r.den), cx + (r.w - dw) / 2, bar - fs * 0.78, r.font, fs, color)
-          this.page.drawLine({ start: { x: cx + 0.5, y: bar }, end: { x: cx + r.w - 0.5, y: bar }, thickness: 0.7, color })
+          this.drawSegs(this.clean(r.num), ix + (inner - nw) / 2, bar + 2.2, r.font, fs, color)
+          this.drawSegs(this.clean(r.den), ix + (inner - dw) / 2, bar - fs * 0.78, r.font, fs, color)
+          if (!r.binom) this.page.drawLine({ start: { x: ix + 0.5, y: bar }, end: { x: ix + inner - 0.5, y: bar }, thickness: 0.7, color })
           cx += r.w
         }
       }
@@ -175,13 +205,23 @@ class Writer {
     }
   }
 
-  private drawSegs(segs: Seg[], x: number, y: number, font: PDFFont, size: number, color = INK) {
+  private drawSegs(segs: Seg[], x: number, y: number, font: PDFFont, size: number, color = INK): number {
     let cx = x
     for (const g of segs) {
-      const fs = g.sup ? size * 0.65 : size
-      this.page.drawText(g.s, { x: cx, y: y + (g.sup ? size * 0.38 : 0), size: fs, font, color })
-      cx += font.widthOfTextAtSize(g.s, fs)
+      const fs = g.sup || g.sub ? size * 0.65 : size
+      const dy = g.sup ? size * 0.38 : g.sub ? -size * 0.2 : 0
+      this.page.drawText(g.s, { x: cx, y: y + dy, size: fs, font, color })
+      const w = font.widthOfTextAtSize(g.s, fs)
+      if (g.vec) {
+        // arrow above the letter(s)
+        const ay = y + size * 0.86
+        this.page.drawLine({ start: { x: cx + 0.5, y: ay }, end: { x: cx + w, y: ay }, thickness: 0.6, color })
+        this.page.drawLine({ start: { x: cx + w - 2.2, y: ay + 1.6 }, end: { x: cx + w, y: ay }, thickness: 0.6, color })
+        this.page.drawLine({ start: { x: cx + w - 2.2, y: ay - 1.6 }, end: { x: cx + w, y: ay }, thickness: 0.6, color })
+      }
+      cx += w
     }
+    return cx
   }
 
   /** A single line of plain text; anchor right when `right` is set. */
@@ -235,7 +275,7 @@ class Writer {
               borderWidth: 1.2,
               borderDashArray: p.dashed ? [4, 3] : undefined,
             })
-          else if (p.k === 'dot') this.page.drawCircle({ x: X(p.cx), y: Y(p.cy), size: 1.6, color: INK })
+          else if (p.k === 'dot') this.page.drawCircle({ x: X(p.cx), y: Y(p.cy), size: 2.3, color: INK })
           else {
             const w = this.textWidth(p.s, this.regular, l.fontSize)
             this.text(p.s, X(p.x) - (p.anchor === 'middle' ? w / 2 : p.anchor === 'end' ? w : 0), { size: l.fontSize, y: Y(p.y) })

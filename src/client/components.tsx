@@ -17,20 +17,39 @@ import { LEVELS, levelKey, levelLabel, levelOf } from '../shared/levels'
 import { tokenizeMath } from '../shared/mathtext'
 import { checkTask } from '../shared/validate'
 
-/** Text with stacked fractions, units and line breaks. */
+/** Text with stacked fractions, powers, indices, vectors and line breaks. */
 export function MathText({ text, className }: { text: string; className?: string }) {
   return (
     <span className={className} style={{ whiteSpace: 'pre-wrap' }}>
-      {tokenizeMath(text).map((tok, i) =>
-        tok.t === 'text' ? (
-          <Fragment key={i}>{tok.s}</Fragment>
-        ) : (
-          <span key={i} className="frac" role="math" aria-label={`${tok.num} over ${tok.den}`}>
-            <span className="frac-num">{tok.num}</span>
-            <span className="frac-den">{tok.den}</span>
+      {tokenizeMath(text).map((tok, i) => {
+        if (tok.t === 'text') return <Fragment key={i}>{tok.s}</Fragment>
+        if (tok.t === 'sup') return <sup key={i}>{tok.s}</sup>
+        if (tok.t === 'sub') return <sub key={i}>{tok.s}</sub>
+        if (tok.t === 'vec')
+          return (
+            <span key={i} className="vec" aria-label={`vektor ${tok.s}`}>
+              {tok.s}
+            </span>
+          )
+        const [top, bottom] = tok.t === 'frac' ? [tok.num, tok.den] : [tok.n, tok.k]
+        const stack = (
+          <span className={`frac${tok.t === 'binom' ? ' binom' : ''}`} role="math" aria-label={`${top} ${tok.t === 'frac' ? 'over' : 'vælg'} ${bottom}`}>
+            <span className="frac-num">
+              <MathText text={top} />
+            </span>
+            <span className="frac-den">
+              <MathText text={bottom} />
+            </span>
           </span>
-        ),
-      )}
+        )
+        return tok.t === 'binom' ? (
+          <span key={i} className="binom-wrap">
+            ({stack})
+          </span>
+        ) : (
+          <Fragment key={i}>{stack}</Fragment>
+        )
+      })}
     </span>
   )
 }
@@ -56,7 +75,7 @@ export function FigureView({ figure, maxWidth = 360, maxHeight = 240 }: { figure
             )
           if (p.k === 'circle')
             return <circle key={i} cx={p.cx} cy={p.cy} r={p.r} fill="none" stroke="#1e2b3a" strokeWidth={1.4} strokeDasharray={p.dashed ? '5 4' : undefined} />
-          if (p.k === 'dot') return <circle key={i} cx={p.cx} cy={p.cy} r={2} fill="#1e2b3a" />
+          if (p.k === 'dot') return <circle key={i} cx={p.cx} cy={p.cy} r={3} fill="#1e2b3a" />
           return (
             <text key={i} x={p.x} y={p.y} textAnchor={p.anchor} fontSize={l.fontSize} fill="#1e2b3a">
               {p.s}

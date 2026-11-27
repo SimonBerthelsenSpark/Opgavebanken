@@ -5,10 +5,16 @@ import { LEVELS, levelLabel } from '../../shared/levels'
 import { navigate } from '../App'
 import { DifficultyBadge, IssueList, TaskEditor, TaskView } from '../components'
 import { KEYS, type SetDraft, readSession, useSessionState, writeSession } from '../session'
-import { deleteTask, updateTask, useTasks } from '../store'
+import { deleteTask, type Report, reportTask, resolveReport, updateTask, useReports, useTasks } from '../store'
 
-export function BankPage({ uid, admin = false }: { uid: string; admin?: boolean }) {
+export function BankPage({ uid, email = null, admin = false }: { uid: string; email?: string | null; admin?: boolean }) {
   const { tasks, error } = useTasks(uid)
+  const reports = useReports()
+  const openReports = useMemo(() => {
+    const m = new Map<string, Report[]>()
+    for (const r of reports ?? []) if (r.status === 'open') m.set(r.taskId, [...(m.get(r.taskId) ?? []), r])
+    return m
+  }, [reports])
   const [filters, setFilters] = useSessionState<Filters>(KEYS.filters, EMPTY_FILTERS)
   const [selected, setSelected] = useSessionState<string[]>(KEYS.selection, [])
   const [open, setOpen] = useState<string | null>(null)
@@ -259,6 +265,9 @@ export function BankPage({ uid, admin = false }: { uid: string; admin?: boolean 
                   topics={topics}
                   mine={t.ownerUid === uid}
                   admin={admin}
+                  reports={openReports.get(t.id) ?? []}
+                  uid={uid}
+                  onReport={(message) => reportTask({ uid, email }, t, message)}
                 />
               ))}
             </tbody>
@@ -286,6 +295,9 @@ function BankRow(props: {
   topics: string[]
   mine: boolean
   admin: boolean
+  reports: Report[]
+  uid: string
+  onReport: (message: string) => Promise<void>
 }) {
   const { task: t } = props
   const flagged = t.issues?.some((i) => i.level === 'error')
@@ -302,6 +314,11 @@ function BankRow(props: {
           {flagged && <span className="badge check">Tjek</span>}
           {t.editedByTeacher && <span className="badge quiet">Rettet</span>}
           {!props.mine && <span className="badge quiet">Kollega</span>}
+          {props.reports.length > 0 && (
+            <span className="badge check" title={props.reports.map((r) => r.message).join('\n')}>
+              Fejl meldt{props.reports.length > 1 ? ` (${props.reports.length})` : ''}
+            </span>
+          )}
         </td>
         <td>{levelLabel(t, true)}</td>
         <td>{t.area}</td>
@@ -325,7 +342,9 @@ function BankRow(props: {
             ) : (
               <>
                 <IssueList issues={t.issues ?? []} />
+                <ReportList reports={props.reports} canResolve={props.mine || props.admin} uid={props.uid} />
                 <TaskView task={t} showGuide verified={t.verified} />
+                <ReportForm onReport={props.onReport} />
                 {props.mine ? (
                   <div className="actions">
                     <button type="button" className="btn outline sm" onClick={props.onEdit}>
@@ -351,5 +370,85 @@ function BankRow(props: {
         </tr>
       )}
     </>
+  )
+}
+
+/** Open error reports on a task; the owner (and admins) can mark them resolved. */
+function ReportList({ reports, canResolve, uid }: { reports: Report[]; canResolve: boolean; uid: string }) {
+  if (!reports.length) return null
+  return (
+    <div className="notice attention" role="status">
+      <strong>Kolleger har meldt fejl i opgaven:</strong>
+      <ul className="reports">
+        {reports.map((r) => (
+          <li key={r.id}>
+            “{r.message}” <span className="small">– {r.reporterEmail ?? 'en kollega'}, {new Date(r.createdAt).toLocaleDateString('da-DK')}</span>
+            {(canResolve || r.reporterUid === uid) && (
+              <button type="button" className="link" onClick={() => resolveReport(uid, r.id)}>
+                Markér som løst
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ReportForm({ onReport }: { onReport: (message: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  if (state === 'sent')
+    return (
+      <p className="notice ok" role="status">
+        Tak. Fejlen er meldt, og opgavens ejer kan se den.
+      </p>
+    )
+  if (!open)
+    return (
+      <div className="actions">
+        <button type="button" className="btn ghost sm" onClick={() => setOpen(true)}>
+          Meld fejl i opgaven
+        </button>
+      </div>
+    )
+  return (
+    <form
+      className="report-form"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (!text.trim() || state === 'sending') return
+        setState('sending')
+        try {
+          await onReport(text)
+          setState('sent')
+        } catch {
+          setState('error')
+        }
+      }}
+    >
+      <label className="field">
+        <span className="field-label">Hvad er forkert?</span>
+        <textarea
+          rows={2}
+          maxLength={1000}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="fx Facit i 1b skal være 24 cm², ikke 22 cm²"
+          required
+          aria-label="Beskriv fejlen"
+        />
+      </label>
+      {state === 'error' && <p className="error">Fejlen kunne ikke meldes. Prøv igen.</p>}
+      <div className="actions">
+        <button type="submit" className="btn outline sm" disabled={state === 'sending' || !text.trim()}>
+          Send fejlmelding
+        </button>
+        <button type="button" className="btn ghost sm" onClick={() => setOpen(false)}>
+          Annullér
+        </button>
+      </div>
+    </form>
   )
 }

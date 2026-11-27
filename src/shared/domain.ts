@@ -46,7 +46,9 @@ export const partSchema = z.object({
 })
 
 export const shapeSchema = z.object({
-  kind: z.enum(['polygon', 'circle', 'segment']),
+  kind: z.enum(['polygon', 'circle', 'segment', 'function', 'point']),
+  /** For kind "function": the expression in x, e.g. "0,5x^2-2x+1" or "3*1,2^x". */
+  expression: z.string().max(200).optional(),
   points: z.array(z.tuple([z.number(), z.number()])).max(12),
   radius: z.number().min(0).max(100),
   sideLabels: z.array(z.string().max(30)).max(12),
@@ -55,9 +57,22 @@ export const shapeSchema = z.object({
   label: z.string().max(40),
 })
 
+/** A coordinate system: when present the figure is drawn as a graph with axes and ticks. */
+export const axesSchema = z.object({
+  xMin: z.number(),
+  xMax: z.number(),
+  yMin: z.number(),
+  yMax: z.number(),
+  xStep: z.number().positive(),
+  yStep: z.number().positive(),
+  xLabel: z.string().max(20),
+  yLabel: z.string().max(20),
+})
+
 export const figureSchema = z.object({
   unit: z.string().max(10),
   grid: z.boolean(),
+  axes: axesSchema.nullable().optional(),
   shapes: z.array(shapeSchema).min(1).max(8),
   caption: z.string().max(200),
 })
@@ -79,6 +94,7 @@ export type Check = z.infer<typeof checkSchema>
 export type Part = z.infer<typeof partSchema>
 export type Shape = z.infer<typeof shapeSchema>
 export type Figure = z.infer<typeof figureSchema>
+export type Axes = z.infer<typeof axesSchema>
 export type TaskContent = z.infer<typeof taskContentSchema>
 
 export interface Issue {

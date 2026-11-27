@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { UsageStats } from '../../shared/admin'
 import { AREAS } from '../../shared/domain'
 import { LEVELS, levelKey } from '../../shared/levels'
 import { adminStats, ApiError } from '../api'
-import { type Profile, useLogins, useProfiles, useTasks } from '../store'
+import { TaskView } from '../components'
+import { deleteTask, type Profile, resolveReport, useLogins, useProfiles, useReports, useTasks } from '../store'
 
 const DAY = 86_400_000
 const fmt = (ms?: number) =>
@@ -11,13 +12,17 @@ const fmt = (ms?: number) =>
 const fmtDate = (ms?: number) => (ms ? new Date(ms).toLocaleDateString('da-DK', { dateStyle: 'medium' }) : '–')
 const providerName = (p: string) => (p === 'google.com' ? 'Google' : p === 'password' ? 'E-mail' : p)
 
-export function AdminPage({ uid }: { uid: string }) {
+export function AdminPage({ uid, admin = false }: { uid: string; admin?: boolean }) {
   const { profiles, error } = useProfiles()
   const logins = useLogins(100)
   const { tasks } = useTasks(uid)
   const [usage, setUsage] = useState<UsageStats | null>(null)
   const [usageError, setUsageError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'users' | 'logins' | 'bank'>('users')
+  const reports = useReports()
+  const [showResolved, setShowResolved] = useState(false)
+  const [openTask, setOpenTask] = useState<string | null>(null)
+  const openCount = (reports ?? []).filter((r) => r.status === 'open').length
+  const [tab, setTab] = useState<'users' | 'logins' | 'bank' | 'reports'>('users')
 
   useEffect(() => {
     adminStats()
@@ -67,6 +72,7 @@ export function AdminPage({ uid }: { uid: string }) {
         <Stat label="Opgaver i banken" value={tasks?.length ?? '…'} />
         <Stat label="Gemte sæt" value={setTotal} />
         <Stat label="Logins seneste døgn" value={loginsToday} />
+        <Stat label="Åbne fejlmeldinger" value={openCount} />
         <Stat
           label="AI-kald i dag"
           value={usage ? callsToday : '…'}
@@ -80,6 +86,7 @@ export function AdminPage({ uid }: { uid: string }) {
             ['users', 'Brugere'],
             ['logins', 'Logins'],
             ['bank', 'Opgavebanken'],
+            ['reports', `Fejlmeldinger${openCount ? ` (${openCount})` : ''}`],
           ] as const
         ).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
@@ -175,6 +182,92 @@ export function AdminPage({ uid }: { uid: string }) {
           </table>
           <p className="muted small">De seneste 100 logins. Et login registreres én gang pr. browsersession.</p>
         </div>
+      )}
+
+      {tab === 'reports' && (
+        <>
+          <label className="inline toolbar">
+            <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} /> Vis også løste
+          </label>
+          <div className="table-wrap">
+            <table className="bank">
+              <thead>
+                <tr>
+                  <th>Meldt</th>
+                  <th>Opgave</th>
+                  <th>Fejl</th>
+                  <th>Meldt af</th>
+                  <th>Status</th>
+                  <th>
+                    <span className="sr-only">Handlinger</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(reports ?? [])
+                  .filter((r) => showResolved || r.status === 'open')
+                  .map((r) => {
+                    const task = (tasks ?? []).find((t) => t.id === r.taskId)
+                    const canResolve = admin || r.ownerUid === uid || r.reporterUid === uid
+                    return (
+                      <Fragment key={r.id}>
+                        <tr>
+                          <td className="num">{fmt(r.createdAt)}</td>
+                          <td>
+                            {task ? (
+                              <button type="button" className="link title" onClick={() => setOpenTask(openTask === r.id ? null : r.id)}>
+                                {r.taskTitle}
+                              </button>
+                            ) : (
+                              <span className="muted">{r.taskTitle} (slettet)</span>
+                            )}
+                          </td>
+                          <td>{r.message}</td>
+                          <td>{r.reporterEmail ?? '–'}</td>
+                          <td>{r.status === 'open' ? <span className="badge check">Åben</span> : <span className="badge ok">Løst</span>}</td>
+                          <td className="r">
+                            {r.status === 'open' && canResolve && (
+                              <button type="button" className="btn outline xs" onClick={() => resolveReport(uid, r.id)}>
+                                Markér som løst
+                              </button>
+                            )}
+                            {admin && task && r.status === 'open' && (
+                              <button
+                                type="button"
+                                className="btn ghost xs danger"
+                                onClick={async () => {
+                                  if (!confirm(`Slet "${task.title}" fra den fælles bank?`)) return
+                                  await deleteTask(uid, task.id)
+                                  await resolveReport(uid, r.id)
+                                }}
+                              >
+                                Slet opgaven
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                        {openTask === r.id && task && (
+                          <tr className="detail">
+                            <td colSpan={6}>
+                              <TaskView task={task} showGuide verified={task.verified} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                {reports && !reports.some((r) => showResolved || r.status === 'open') && (
+                  <tr>
+                    <td colSpan={6} className="muted">
+                      Ingen åbne fejlmeldinger.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted small">Opgavens ejer får besked i banken og kan rette opgaven. Ejeren, den der meldte fejlen, og admin kan markere den som løst.</p>
+        </>
       )}
 
       {tab === 'bank' && (

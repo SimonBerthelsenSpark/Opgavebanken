@@ -167,6 +167,14 @@ table.bank tr.detail td { background: #fcfcfd; padding-top: 4px; padding-bottom:
 .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; font-size: 0.85em; line-height: 1.1; margin: 0 2px; }
 .frac-num { border-bottom: 1px solid currentColor; padding: 0 2px; }
 .frac-den { padding: 0 2px; }
+.frac.binom .frac-num { border-bottom: 0; }
+.binom-wrap { white-space: nowrap; }
+.vec {
+  position: relative; display: inline-block; padding: 0.3em 0.15em 0 0; line-height: 1;
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 0.12em / calc(100% - 2px) 1px;
+}
+.vec::after { content: ''; position: absolute; right: 0; top: calc(0.12em - 3px); border-style: solid; border-width: 3.5px 0 3.5px 6px; border-color: transparent transparent transparent currentColor; }
+sup, sub { font-size: 0.72em; line-height: 0; }
 .figure { margin: 8px 0; }
 .figure svg { max-width: 100%; height: auto; background: #fff; }
 .figure figcaption { font-size: 13px; color: var(--ink-soft); }
@@ -226,3 +234,7 @@ details summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); marg
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .stat strong { font-size: 26px; font-weight: 600; line-height: 1.2; }
+
+.reports { margin: 6px 0 0; padding-left: 18px; }
+.reports li { margin-bottom: 4px; }
+.report-form { margin-top: 8px; max-width: 640px; }

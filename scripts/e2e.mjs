@@ -82,7 +82,7 @@ async function downloadAll(prefix) {
   for (const label of ['1. Elevens opgavesæt', '2. Rettevejledning', '3. Pointtabel']) {
     const start = downloads.done.length
     await clickText(label)
-    for (let i = 0; i < 40 && downloads.done.length === start; i++) await sleep(250)
+    for (let i = 0; i < 100 && downloads.done.length === start; i++) await sleep(250)
     if (process.env.DEBUG) console.log('DL', label, JSON.stringify(downloads))
     const guid = downloads.done[downloads.done.length - 1]
     const name = downloads.names[guid] ?? ''
@@ -177,7 +177,48 @@ try {
   const mineRows = await page.$$eval('table.bank tbody tr', (r) => r.length)
   check('“Kun mine opgaver” skjuler kollegers opgaver', mineRows === 12, `${mineRows} rækker`)
   await page.evaluate(() => [...document.querySelectorAll('label.inline.mine input')][0].click())
+  await sleep(200)
+
+  // ---- report an error in the colleague's task
+  await page.evaluate(() => [...document.querySelectorAll('tr.detail button')].find((b) => b.textContent === 'Meld fejl i opgaven').click())
+  await page.type('textarea[aria-label="Beskriv fejlen"]', 'Facit skal være 3/4, men forklaringen mangler')
+  await clickText('Send fejlmelding')
+  await waitText('Fejlen er meldt')
+  await sleep(300)
+  check('Fejlmelding vises som “Fejl meldt” i banken', (await bodyText()).includes('Fejl meldt'))
   await page.evaluate(() => [...document.querySelectorAll('table.bank button.link.title')].find((b) => b.textContent === 'Kollegas brøkopgave').click())
+
+  // ---- a gymnasium task with a graph and notation
+  await page.evaluate(() =>
+    window.__addForeignTask({
+      id: 'kollega2', ownerUid: 'en-anden-laerer', title: 'Kollegas tangentopgave',
+      intro: "Figuren viser grafen for f(x) = \\frac{1}{2}x^2 - 2x + 1. Vækst: e^{0,5x}, \\vec{a} og \\binom{10}{3}.",
+      figure: { unit: '', grid: true, caption: '', axes: { xMin: -2, xMax: 6, yMin: -3, yMax: 8, xStep: 1, yStep: 1, xLabel: 'x', yLabel: 'y' },
+        shapes: [
+          { kind: 'function', expression: '0.5x^2-2x+1', points: [], radius: 0, sideLabels: [], rightAngles: [], dashed: false, label: 'f' },
+          { kind: 'point', expression: '', points: [[4, 1]], radius: 0, sideLabels: [], rightAngles: [], dashed: false, label: 'P(4; 1)' },
+        ] },
+      parts: [{ question: "Bestem f'(4).", answer: '2', solution: "f'(x) = x - 2", points: 1,
+        criteria: [{ points: 1, description: 'Korrekt' }], check: { expression: '4-2', value: 2, unit: '' } }],
+      grade: 11, niveau: 'B', area: 'Funktioner og infinitesimalregning', topic: 'Differentialregning', difficulty: 'Middel',
+      issues: [], verified: [true], source: 'ai', editedByTeacher: false, createdAt: 2, updatedAt: 2,
+    }),
+  )
+  await waitText('Kollegas tangentopgave')
+  await page.evaluate(() => [...document.querySelectorAll('table.bank button.link.title')].find((b) => b.textContent === 'Kollegas tangentopgave').click())
+  await sleep(300)
+  const graphOk = await page.evaluate(() => {
+    const svg = [...document.querySelectorAll('tr.detail svg')].pop()
+    const longest = Math.max(0, ...[...(svg?.querySelectorAll('polyline') ?? [])].map((p) => p.getAttribute('points').split(' ').length))
+    const html = document.querySelector('tr.detail')?.innerHTML ?? ''
+    return { longest, sup: html.includes('<sup>'), vec: html.includes('class="vec"'), binom: html.includes('binom') }
+  })
+  await page.evaluate(() => document.querySelector('tr.detail')?.scrollIntoView())
+  await shot('08-graf')
+  check('Graf og gymnasienotation vises', graphOk.longest > 50 && graphOk.sup && graphOk.vec && graphOk.binom, JSON.stringify(graphOk))
+  const bankRow = await page.evaluate(() => [...document.querySelectorAll('table.bank tbody tr')].map((r) => r.innerText).find((t) => t.includes('Kollegas tangentopgave')) ?? '')
+  check('Bankrækken viser gymnasieniveau', bankRow.includes('2.g B'), bankRow.split('\t').slice(1, 3).join(' | '))
+  await page.evaluate(() => [...document.querySelectorAll('table.bank button.link.title')].find((b) => b.textContent === 'Kollegas tangentopgave').click())
 
   await go('/generer')
   check('Gemte opgaver forsvinder fra “Generér opgaver”', !(await bodyText()).includes('Forhåndsvisning'))
@@ -341,6 +382,14 @@ try {
   await clickText('Logins', 'button[role=tab]')
   await sleep(300)
   check('Login-log viser logins', (await page.$$eval('table.bank tbody tr', (r) => r.length)) >= 2)
+  await clickText('Fejlmeldinger', 'button[role=tab]')
+  await sleep(300)
+  const repText = await bodyText()
+  check('Admin ser fejlmeldingen', repText.includes('Fejlmeldinger (1)') && repText.includes('forklaringen mangler'))
+  await shot('09-fejlmeldinger')
+  await clickText('Markér som løst')
+  await sleep(300)
+  check('Fejlmelding kan markeres som løst', (await bodyText()).includes('Ingen åbne fejlmeldinger'))
 } catch (e) {
   check('Uventet fejl', false, e.message)
   await shot('fejl')

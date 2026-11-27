@@ -82,9 +82,9 @@ export function App() {
     page = <ProgressionPage uid={uid} />
     active = '/progression'
   } else if (path === '/admin') {
-    page = <AdminPage uid={uid} />
+    page = <AdminPage uid={uid} admin={admin} />
     active = '/admin'
-  } else page = <BankPage uid={uid} admin={admin} />
+  } else page = <BankPage uid={uid} email={user.email} admin={admin} />
 
   return (
     <>

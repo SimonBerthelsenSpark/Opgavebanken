@@ -58,6 +58,23 @@ service cloud.firestore {
       allow read: if request.auth != null;
     }
 
+    // Error reports on tasks: any teacher can report; the task owner, the reporter and admins can
+    // mark a report resolved (only the status fields may change); admins can delete reports.
+    match /reports/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.status == 'open'
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 1000;
+      allow update: if request.auth != null
+        && (isAdmin() || resource.data.ownerUid == request.auth.uid || resource.data.reporterUid == request.auth.uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt', 'resolvedBy'])
+        && request.resource.data.status == 'resolved';
+      allow delete: if isAdmin();
+    }
+
     match /users/{uid} {
       allow read, write: if isOwner(uid);
 

@@ -123,6 +123,37 @@ const set: SavedSet = {
         },
       ],
     }),
+    base(99, {
+      title: 'Andengradspolynomium og tangent',
+      grade: 11,
+      niveau: 'B',
+      area: 'Funktioner og infinitesimalregning',
+      topic: 'Differentialregning',
+      intro: "Figuren viser grafen for f(x) = \\frac{1}{2}x^2 - 2x + 1 og punktet P(4; 1). Væksten er e^{0,5x}, vektoren \\vec{a} og \\binom{10}{3} = 120. Indeks a_1 og \\int_0^2 x\\,dx.",
+      figure: {
+        unit: '',
+        grid: true,
+        caption: '',
+        axes: { xMin: -2, xMax: 6, yMin: -3, yMax: 8, xStep: 1, yStep: 1, xLabel: 'x', yLabel: 'y' },
+        shapes: [
+          { kind: 'function', expression: '0.5x^2-2x+1', points: [], radius: 0, sideLabels: [], rightAngles: [], dashed: false, label: 'f' },
+          { kind: 'point', expression: '', points: [[4, 1]], radius: 0, sideLabels: [], rightAngles: [], dashed: false, label: 'P(4; 1)' },
+        ],
+      },
+      parts: [
+        {
+          question: "Bestem f'(4), og bestem en ligning for tangenten i P.",
+          answer: "f'(4) = 2, y = 2x - 7",
+          solution: "f'(x) = x - 2, så f'(4) = 2. Tangent: y = 2(x - 4) + 1.",
+          points: 3,
+          criteria: [
+            { points: 1, description: "f'(x) = x - 2" },
+            { points: 2, description: 'Tangentligning y = 2x - 7' },
+          ],
+          check: { expression: '4-2', value: 2, unit: '' },
+        },
+      ],
+    }),
     ...Array.from({ length: 4 }, (_, k) =>
       base(4 + k, {
         title: `Ternet figur ${k + 1}`,
@@ -188,8 +219,8 @@ describe('PDFs', () => {
   })
   it('point table rows and total agree', async () => {
     const rows = pointRows(set)
-    expect(rows.map((r) => r.label)).toEqual(['1a', '1b', '2', '3', '4', '5', '6', '7'])
+    expect(rows.map((r) => r.label)).toEqual(['1a', '1b', '2', '3', '4', '5', '6', '7', '8'])
     const t = text(await pointTablePdf(set, fonts), 'point')
-    expect(t).toMatch(/I alt\s+12/)
+    expect(t).toMatch(/I alt\s+15/)
   })
 })

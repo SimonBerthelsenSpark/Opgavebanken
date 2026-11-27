@@ -34,7 +34,8 @@ export const planJsonSchema = obj({
 })
 
 const shape = obj({
-  kind: { type: 'string', enum: ['polygon', 'circle', 'segment'] },
+  kind: { type: 'string', enum: ['polygon', 'circle', 'segment', 'function', 'point'] },
+  expression: str,
   points: arr(arr(num)),
   radius: num,
   sideLabels: arr(str),
@@ -43,9 +44,12 @@ const shape = obj({
   label: str,
 })
 
+const axes = obj({ xMin: num, xMax: num, yMin: num, yMax: num, xStep: num, yStep: num, xLabel: str, yLabel: str })
+
 const figure = obj({
   unit: str,
   grid: bool,
+  axes: { anyOf: [axes, { type: 'null' }] },
   shapes: arr(shape),
   caption: str,
 })

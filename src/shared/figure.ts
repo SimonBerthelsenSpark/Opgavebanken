@@ -1,4 +1,5 @@
-import type { Figure } from './domain'
+import { compile } from './calc'
+import type { Axes, Figure } from './domain'
 
 /**
  * Figures are described as data (shapes with coordinates in the task's unit) so that the server can
@@ -52,6 +53,7 @@ function bbox(fig: Figure) {
 
 /** Lay out a figure in a box of at most maxW × maxH (y grows downwards). */
 export function layoutFigure(fig: Figure, maxW: number, maxH: number, fontSize = 11): FigureLayout {
+  if (fig.axes) return layoutGraph(fig, fig.axes, maxW, maxH, fontSize)
   const b = bbox(fig)
   const bw = b.maxX - b.minX
   const bh = b.maxY - b.minY
@@ -177,6 +179,7 @@ const close = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.02 * Math.
 
 /** Inconsistencies between the drawn geometry and the measures written on it. */
 export function figureProblems(fig: Figure): string[] {
+  if (fig.axes) return graphProblems(fig, fig.axes)
   const problems: string[] = []
   fig.shapes.forEach((s, si) => {
     const name = `Figurens form ${si + 1}`
@@ -217,3 +220,141 @@ export function figureProblems(fig: Figure): string[] {
 }
 
 const round = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
+
+const fmtTick = (v: number) => String(Math.round(v * 1e6) / 1e6).replace('.', ',')
+
+/** Coordinate-system figures: axes with ticks, function graphs, points, segments and polygons. */
+function layoutGraph(fig: Figure, ax: Axes, maxW: number, maxH: number, fontSize: number): FigureLayout {
+  const padL = fontSize * 3.2
+  const padR = fontSize * 2
+  const padT = fontSize * 1.6
+  const padB = fontSize * 2.2
+  const w = Math.min(maxW, 380) - padL - padR
+  const h = Math.min(maxH, 300) - padT - padB
+  const sx = w / (ax.xMax - ax.xMin)
+  const sy = h / (ax.yMax - ax.yMin)
+  const X = (x: number) => padL + (x - ax.xMin) * sx
+  const Y = (y: number) => padT + (ax.yMax - y) * sy
+  const prims: Prim[] = []
+  const small = fontSize * 0.85
+  // keep ticks readable: at most ~16 per axis
+  const step = (range: number, st: number) => {
+    let s = st
+    while (range / s > 16) s *= 2
+    return s
+  }
+  const xs = step(ax.xMax - ax.xMin, ax.xStep)
+  const ys = step(ax.yMax - ax.yMin, ax.yStep)
+  const ticks = (min: number, max: number, st: number) => {
+    const out: number[] = []
+    for (let v = Math.ceil(min / st - 1e-9) * st; v <= max + 1e-9; v += st) out.push(Math.round(v * 1e9) / 1e9)
+    return out
+  }
+  if (fig.grid) {
+    for (const x of ticks(ax.xMin, ax.xMax, xs)) prims.push({ k: 'gridline', x1: X(x), y1: Y(ax.yMin), x2: X(x), y2: Y(ax.yMax) })
+    for (const y of ticks(ax.yMin, ax.yMax, ys)) prims.push({ k: 'gridline', x1: X(ax.xMin), y1: Y(y), x2: X(ax.xMax), y2: Y(y) })
+  }
+  const x0 = ax.xMin <= 0 && ax.xMax >= 0 ? 0 : ax.xMin // where the y-axis stands
+  const y0 = ax.yMin <= 0 && ax.yMax >= 0 ? 0 : ax.yMin // where the x-axis lies
+  const arrow = (x: number, y: number, dx: number, dy: number) =>
+    prims.push({ k: 'poly', pts: [[x - dx * 6 - dy * 3.5, y - dy * 6 + dx * 3.5], [x, y], [x - dx * 6 + dy * 3.5, y - dy * 6 - dx * 3.5]], closed: false, dashed: false, weight: 1 })
+  prims.push({ k: 'poly', pts: [[X(ax.xMin), Y(y0)], [X(ax.xMax) + 8, Y(y0)]], closed: false, dashed: false, weight: 1 })
+  arrow(X(ax.xMax) + 8, Y(y0), 1, 0)
+  prims.push({ k: 'poly', pts: [[X(x0), Y(ax.yMin)], [X(x0), Y(ax.yMax) - 8]], closed: false, dashed: false, weight: 1 })
+  arrow(X(x0), Y(ax.yMax) - 8, 0, -1)
+  prims.push({ k: 'text', x: X(ax.xMax) + 10, y: Y(y0) + small * 1.4, s: ax.xLabel || 'x', anchor: 'end' })
+  prims.push({ k: 'text', x: X(x0) + 6, y: Y(ax.yMax) - 2, s: ax.yLabel || 'y', anchor: 'start' })
+  for (const x of ticks(ax.xMin, ax.xMax, xs)) {
+    if (Math.abs(x - x0) < 1e-9 && x0 === 0) continue
+    prims.push({ k: 'poly', pts: [[X(x), Y(y0) - 3], [X(x), Y(y0) + 3]], closed: false, dashed: false, weight: 0.8 })
+    prims.push({ k: 'text', x: X(x), y: Y(y0) + small * 1.35, s: fmtTick(x), anchor: 'middle' })
+  }
+  for (const y of ticks(ax.yMin, ax.yMax, ys)) {
+    if (Math.abs(y - y0) < 1e-9 && y0 === 0) continue
+    prims.push({ k: 'poly', pts: [[X(x0) - 3, Y(y)], [X(x0) + 3, Y(y)]], closed: false, dashed: false, weight: 0.8 })
+    prims.push({ k: 'text', x: X(x0) - 5, y: Y(y) + small * 0.35, s: fmtTick(y), anchor: 'end' })
+  }
+  if (x0 === 0 && y0 === 0) prims.push({ k: 'text', x: X(0) - 5, y: Y(0) + small * 1.35, s: '0', anchor: 'end' })
+
+  for (const s of fig.shapes) {
+    if (s.kind === 'function' && s.expression) {
+      let f: (x: number) => number
+      try {
+        f = compile(s.expression, true)
+      } catch {
+        continue
+      }
+      const N = 300
+      let run: [number, number][] = []
+      const flush = () => {
+        if (run.length > 1) prims.push({ k: 'poly', pts: run, closed: false, dashed: s.dashed, weight: 1.5 })
+        run = []
+      }
+      let lastInside: [number, number] | null = null
+      for (let i = 0; i <= N; i++) {
+        const x = ax.xMin + ((ax.xMax - ax.xMin) * i) / N
+        let y: number
+        try {
+          y = f(x)
+        } catch {
+          y = Number.NaN
+        }
+        if (Number.isFinite(y) && y >= ax.yMin && y <= ax.yMax) {
+          run.push([X(x), Y(y)])
+          lastInside = [X(x), Y(y)]
+        } else flush()
+      }
+      flush()
+      if (s.label.trim() && lastInside) prims.push({ k: 'text', x: lastInside[0] + 4, y: lastInside[1] - 6, s: s.label.trim(), anchor: 'start' })
+    } else if (s.kind === 'point' && s.points[0]) {
+      const [px, py] = s.points[0]
+      prims.push({ k: 'dot', cx: X(px), cy: Y(py) })
+      if (s.label.trim()) prims.push({ k: 'text', x: X(px) + 5, y: Y(py) - 6, s: s.label.trim(), anchor: 'start' })
+    } else if (s.kind === 'segment' && s.points.length >= 2) {
+      const [a, b] = s.points
+      prims.push({ k: 'poly', pts: [[X(a[0]), Y(a[1])], [X(b[0]), Y(b[1])]], closed: false, dashed: s.dashed, weight: 1.1 })
+      const label = (s.sideLabels[0] || s.label).trim()
+      if (label) prims.push({ k: 'text', x: X(b[0]) + 4, y: Y(b[1]) - 4, s: label, anchor: 'start' })
+    } else if (s.kind === 'polygon' && s.points.length >= 2) {
+      prims.push({ k: 'poly', pts: s.points.map(([x, y]) => [X(x), Y(y)] as [number, number]), closed: true, dashed: s.dashed, weight: 1.3 })
+    } else if (s.kind === 'circle' && s.points[0]) {
+      // circles stay round only with equal scales; draw with the x-scale
+      prims.push({ k: 'circle', cx: X(s.points[0][0]), cy: Y(s.points[0][1]), r: s.radius * sx, dashed: s.dashed })
+    }
+  }
+  return { width: w + padL + padR, height: h + padT + padB, prims, fontSize: small }
+}
+
+/** Problems specific to coordinate-system figures. */
+function graphProblems(fig: Figure, ax: Axes): string[] {
+  const p: string[] = []
+  if (!(ax.xMin < ax.xMax) || !(ax.yMin < ax.yMax)) p.push('Koordinatsystemet har ugyldige akser (min skal være mindre end max).')
+  if ((ax.xMax - ax.xMin) / ax.xStep > 100 || (ax.yMax - ax.yMin) / ax.yStep > 100) p.push('Koordinatsystemets inddeling er for fin.')
+  fig.shapes.forEach((s, i) => {
+    const name = `Figurens form ${i + 1}`
+    if (s.kind === 'function') {
+      try {
+        const f = compile(s.expression ?? '', true)
+        let inside = 0
+        for (let k = 0; k <= 60; k++) {
+          const y = f(ax.xMin + ((ax.xMax - ax.xMin) * k) / 60)
+          if (Number.isFinite(y) && y >= ax.yMin && y <= ax.yMax) inside++
+        }
+        if (inside < 3) p.push(`${name}: grafen for ${s.expression} ligger uden for koordinatsystemet.`)
+      } catch (e) {
+        p.push(`${name}: forskriften "${s.expression}" kan ikke tegnes (${(e as Error).message}).`)
+      }
+    }
+    if (s.kind === 'point' && s.points[0]) {
+      const [x, y] = s.points[0]
+      if (x < ax.xMin || x > ax.xMax || y < ax.yMin || y > ax.yMax) p.push(`${name}: punktet ligger uden for koordinatsystemet.`)
+      const m = /\(\s*(-?\d+(?:,\d+)?)\s*;\s*(-?\d+(?:,\d+)?)\s*\)/.exec(s.label)
+      if (m) {
+        const lx = Number(m[1].replace(',', '.'))
+        const ly = Number(m[2].replace(',', '.'))
+        if (Math.abs(lx - x) > 0.01 || Math.abs(ly - y) > 0.01) p.push(`${name}: punktet er mærket "${s.label}", men tegnet i (${fmtTick(x)}; ${fmtTick(y)}).`)
+      }
+    }
+  })
+  return p
+}

@@ -173,3 +173,50 @@ describe('levels', async () => {
     expect(ctx).not.toContain('Matematik A')
   })
 })
+
+describe('gymnasium maths', async () => {
+  const { compile } = await import('../src/shared/calc')
+  const { figureProblems: problems, layoutFigure: layout } = await import('../src/shared/figure')
+  it('evaluates functions in degrees, logarithms and binomials', () => {
+    expect(evaluate('sin(30)')).toBeCloseTo(0.5, 9)
+    expect(evaluate('2*cos(60)')).toBeCloseTo(1, 9)
+    expect(evaluate('ln(e^2)')).toBeCloseTo(2, 9)
+    expect(evaluate('log(1000)')).toBeCloseTo(3, 9)
+    expect(evaluate('binom(10; 3)')).toBe(120)
+    expect(evaluate('5!')).toBe(120)
+    expect(evaluate('200*1,05^10')).toBeCloseTo(325.78, 2)
+    expect(evaluate('atan(1)')).toBeCloseTo(45, 9)
+    expect(compile('0.5x^2-2x+1', true)(4)).toBe(1)
+    expect(() => evaluate('x+1')).toThrow()
+  })
+  it('tokenizes gymnasium notation', () => {
+    const t = tokenizeMath("f(x) = e^{0,5x} og f'(x), \\vec{a}, \\binom{10}{3}, a_1, \\int_0^2 x\\,dx ≤ \\infty")
+    const kinds = t.map((x) => x.t)
+    expect(kinds).toContain('sup')
+    expect(kinds).toContain('vec')
+    expect(kinds).toContain('binom')
+    expect(kinds).toContain('sub')
+    const text = t.filter((x) => x.t === 'text').map((x) => (x as { s: string }).s).join('')
+    expect(text).toContain('f′(x)')
+    expect(text).toContain('∫')
+    expect(text).toContain('∞')
+    expect(tokenizeMath('Udfyld: ____ cm').every((x) => x.t === 'text')).toBe(true)
+  })
+  const graph = (label: string) => ({
+    unit: '',
+    grid: true,
+    caption: '',
+    axes: { xMin: -2, xMax: 6, yMin: -3, yMax: 8, xStep: 1, yStep: 1, xLabel: 'x', yLabel: 'y' },
+    shapes: [
+      { kind: 'function' as const, expression: '0.5x^2-2x+1', points: [], radius: 0, sideLabels: [], rightAngles: [], dashed: false, label: 'f' },
+      { kind: 'point' as const, expression: '', points: [[4, 1]] as [number, number][], radius: 0, sideLabels: [], rightAngles: [], dashed: false, label },
+    ],
+  })
+  it('draws and checks graphs', () => {
+    expect(problems(graph('P(4; 1)'))).toEqual([])
+    expect(problems(graph('P(4; 2)'))[0]).toMatch(/mærket/)
+    const l = layout(graph('P(4; 1)'), 360, 260)
+    expect(l.prims.some((p) => p.k === 'poly' && p.pts.length > 50)).toBe(true)
+    expect(l.prims.filter((p) => p.k === 'text').length).toBeGreaterThan(10)
+  })
+})

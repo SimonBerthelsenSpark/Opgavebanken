@@ -244,3 +244,53 @@ export function useLogins(max = 100) {
   )
   return logins
 }
+
+// ---- error reports on tasks
+
+export interface Report {
+  id: string
+  taskId: string
+  taskTitle: string
+  ownerUid: string
+  reporterUid: string
+  reporterEmail: string | null
+  message: string
+  createdAt: number
+  status: 'open' | 'resolved'
+  resolvedAt?: number
+  resolvedBy?: string
+}
+
+/** A teacher reports something wrong in a task; the owner and admins see it and can mark it resolved. */
+export async function reportTask(
+  user: { uid: string; email: string | null },
+  task: { id: string; title: string; ownerUid: string },
+  message: string,
+): Promise<void> {
+  await addDoc(collection(db, 'reports'), {
+    taskId: task.id,
+    taskTitle: task.title,
+    ownerUid: task.ownerUid,
+    reporterUid: user.uid,
+    reporterEmail: user.email,
+    message: message.trim().slice(0, 1000),
+    createdAt: Date.now(),
+    status: 'open',
+  })
+}
+
+export function useReports() {
+  const [reports, setReports] = useState<Report[] | null>(null)
+  useEffect(
+    () =>
+      onSnapshot(query(collection(db, 'reports'), orderBy('createdAt', 'desc'), limit(300)), (snap) =>
+        setReports(snap.docs.map((d) => ({ ...(d.data() as Omit<Report, 'id'>), id: d.id }))),
+      ),
+    [],
+  )
+  return reports
+}
+
+export async function resolveReport(uid: string, id: string): Promise<void> {
+  await updateDoc(doc(db, 'reports', id), { status: 'resolved', resolvedAt: Date.now(), resolvedBy: uid })
+}

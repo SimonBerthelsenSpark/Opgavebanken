@@ -18,6 +18,7 @@ const write = <T,>(v: T): T => {
 const db = {
   profiles: new Map<string, Record<string, unknown>>(),
   logins: [] as Record<string, unknown>[],
+  reports: [] as Record<string, unknown>[],
   tasks: new Map<string, Task>(),
   sets: new Map<string, SavedSet>(),
   progression: null as Progression | null,
@@ -143,4 +144,21 @@ export function useProfiles() {
 
 export function useLogins(_max = 100) {
   return useLive(() => db.logins.map(clone)) as never
+}
+
+export type { Report } from './store'
+
+export async function reportTask(user: { uid: string; email: string | null }, task: { id: string; title: string; ownerUid: string }, message: string) {
+  db.reports.unshift(write({ id: id(), taskId: task.id, taskTitle: task.title, ownerUid: task.ownerUid, reporterUid: user.uid, reporterEmail: user.email, message: message.trim(), createdAt: Date.now(), status: 'open' }))
+  emit()
+}
+
+export function useReports() {
+  return useLive(() => db.reports.map(clone)) as never
+}
+
+export async function resolveReport(uid: string, rid: string) {
+  const r = db.reports.find((x) => x.id === rid)
+  if (r) Object.assign(r, { status: 'resolved', resolvedAt: Date.now(), resolvedBy: uid })
+  emit()
 }

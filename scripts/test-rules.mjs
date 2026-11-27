@@ -71,6 +71,16 @@ expect('Lærere kan læse login-loggen', await req('POST', ':runQuery', 'A', { s
 expect('Admin kan læse login-loggen', await req('POST', ':runQuery', 'ADMIN', { structuredQuery: { from: [{ collectionId: 'logins' }] } }), true)
 expect('Lærer A gemmer opgave t5', await req('PATCH', 'tasks/t5', 'A', doc({ ...task, ownerUid: 'A' })), true)
 expect('Admin kan slette en lærers opgave', await req('DELETE', 'tasks/t5', 'ADMIN'), true)
+const report = { taskId: 't1', taskTitle: 'Rektangel', ownerUid: 'A', reporterUid: 'B', reporterEmail: 'B@skole.dk', message: 'Facit er forkert', createdAt: 1, status: 'open' }
+expect('Lærer B melder fejl i A’s opgave', await req('PATCH', 'reports/r1', 'B', doc(report)), true)
+expect('Fejlmelding i en andens navn afvises', await req('PATCH', 'reports/r2', 'B', doc({ ...report, reporterUid: 'A' })), false)
+expect('Tom fejlmelding afvises', await req('PATCH', 'reports/r3', 'B', doc({ ...report, message: '' })), false)
+expect('Alle lærere kan se fejlmeldinger', await req('GET', 'reports/r1', 'C'), true)
+expect('Lærer C kan ikke lukke andres fejlmelding', await req('PATCH', 'reports/r1', 'C', doc({ status: 'resolved', resolvedAt: 2, resolvedBy: 'C' }), '?updateMask.fieldPaths=status&updateMask.fieldPaths=resolvedAt&updateMask.fieldPaths=resolvedBy'), false)
+expect('Ejeren kan ikke ændre selve meldingen', await req('PATCH', 'reports/r1', 'A', doc({ message: 'Ændret' }), '?updateMask.fieldPaths=message'), false)
+expect('Opgavens ejer kan markere fejlen som løst', await req('PATCH', 'reports/r1', 'A', doc({ status: 'resolved', resolvedAt: 2, resolvedBy: 'A' }), '?updateMask.fieldPaths=status&updateMask.fieldPaths=resolvedAt&updateMask.fieldPaths=resolvedBy'), true)
+expect('Kun admin kan slette fejlmeldinger', await req('DELETE', 'reports/r1', 'A'), false)
+expect('Admin kan slette fejlmeldinger', await req('DELETE', 'reports/r1', 'ADMIN'), true)
 const set = { title: 'Sæt', createdAt: 1, totalPoints: 1, tasks: [task] }
 expect('Lærer A gemmer et sæt', await req('PATCH', 'users/A/sets/s1', 'A', doc(set)), true)
 expect('Sættets titel kan ændres', await req('PATCH', 'users/A/sets/s1', 'A', doc({ title: 'Nyt navn' }), '?updateMask.fieldPaths=title'), true)

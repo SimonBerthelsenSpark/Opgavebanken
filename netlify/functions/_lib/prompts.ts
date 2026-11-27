@@ -47,17 +47,24 @@ export const TASK_RULES = `Regler for hver opgave:
 - Alt på dansk, i et sprog eleverne på klassetrinnet kan læse. Tal elever an med "du".
 - "intro" er opgavens fælles tekst (situation og oplysninger). "parts" er delspørgsmålene (1–4 stk.). Facit må aldrig stå i intro eller i spørgsmålene.
 - Skriv tal med decimalkomma (12,5) og enheder med mellemrum (12 cm). Kvadrat- og kubikenheder skrives cm^2 og m^3. Gange skrives ·, division : eller som brøk.
-- Brøker skrives \\frac{tæller}{nævner}, fx \\frac{3}{4}. Blandede tal: 2\\frac{1}{3}. Ingen anden LaTeX.
+- Brøker skrives \\frac{tæller}{nævner}, fx \\frac{3}{4}. Blandede tal: 2\\frac{1}{3}.
+- Anden notation, der må bruges: potenser x^2 og e^{0,5x}, indeks a_1 og x_{0}, \\sqrt{x}, \\vec{a}, \\binom{n}{k}, \\int_0^2, f'(x), græske bogstaver (\\alpha, \\Delta), \\le, \\ge, \\neq, \\approx, \\infty, \\cdot, ln, log, sin, cos, tan. Ingen anden LaTeX (ingen matricer, ingen \\begin).
 - "answer": kort facit med enhed, fx "40 cm^2". Ved åbne opgaver: et eksempel på et korrekt svar og hvad der skal til.
 - "solution": lærerens løsningsforslag trin for trin.
 - "points": 1–4 point pr. delspørgsmål efter omfang. "criteria": konkrete, additive delpoint, hvis point tilsammen er præcis "points" (fx "1 point: korrekt opstilling 8 · 5", "1 point: 40 cm^2 med enhed").
-- "check": Når facit er ét tal, er "expression" et regneudtryk kun med tal, + - · / ^, sqrt(), pi og parenteser, som giver tallet; "value" er tallet som i facit (samme afrunding); "unit" er facits enhed ("" hvis ingen). Når facit ikke er ét tal (forklaring, flere svar, tegning): expression "" og value null.
+- "check": Når facit er ét tal, er "expression" et regneudtryk med tal, + - * / ^, parenteser, pi, e og funktionerne sqrt, ln, log (titalslogaritme), exp, abs, sin, cos, tan, asin, acos, atan (vinkler i grader), fact(n) og binom(n; k) (argumenter adskilles med semikolon), som giver tallet; "value" er tallet som i facit (samme afrunding); "unit" er facits enhed ("" hvis ingen). Når facit ikke er ét tal (forklaring, flere svar, tegning): expression "" og value null.
 - Figur: Brug en figur, når idéen har needsFigure=true, eller når teksten henviser til en figur. Ellers figure = null, og teksten må ikke nævne en figur.
   - Koordinater er i figurens enhed ("unit", fx "cm"), så længderne i tegningen svarer nøjagtigt til målene på figuren.
   - polygon: "points" er hjørnerne i rækkefølge rundt om figuren. "sideLabels" har én tekst pr. side (side i går fra punkt i til punkt i+1, den sidste tilbage til det første); tom tekst for sider uden mål. Skriv mål som "8 cm"; ukendte sider som "?" eller "x". "rightAngles" er indeks på hjørner med ret vinkel. "radius" = 0.
   - circle: "points" = [centrum], "radius" i figurens enhed, "label" fx "r = 3 cm".
   - segment: to punkter, fx en højde (dashed = true) med målet i sideLabels[0].
   - "grid" = true giver kvadratnet med 1 enhed pr. tern (til opgaver, hvor eleven tæller tern); brug da hele koordinater.
+  - Grafer og koordinatsystemer: sæt "axes" (xMin, xMax, yMin, yMax, xStep, yStep, xLabel, yLabel), ellers axes = null. I et koordinatsystem:
+    - function: "expression" er forskriften i x (fx "0.5*x^2-2*x+1", "200*1.05^x", "sin(x)"), "label" fx "f". Grafen skal ligge synligt inden for akserne.
+    - point: "points" = [[x, y]], "label" fx "P(2; 5)" med semikolon mellem koordinaterne, og koordinaterne skal passe med punktet.
+    - segment: fx en tangent eller asymptote (dashed = true), polygon: fx en trekant i koordinatsystemet.
+    - Tegn aldrig selve svaret ind, hvis eleven skal finde det (fx ikke tangenten, når den skal bestemmes).
+  - For alle former, der ikke bruger det: "expression" = "".
   - Alle mål, eleven skal bruge, skal stå på figuren eller i teksten. "caption" kan være tom.
 - Sæt "area", "topic" og "difficulty" som i idéen.`
 
