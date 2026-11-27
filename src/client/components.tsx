@@ -4,7 +4,6 @@ import {
   type Criterion,
   DIFFICULTIES,
   type Figure,
-  GRADES,
   type Issue,
   type Part,
   type TaskContent,
@@ -14,6 +13,7 @@ import {
   taskPoints,
 } from '../shared/domain'
 import { layoutFigure } from '../shared/figure'
+import { LEVELS, levelKey, levelLabel, levelOf } from '../shared/levels'
 import { tokenizeMath } from '../shared/mathtext'
 import { checkTask } from '../shared/validate'
 
@@ -159,7 +159,7 @@ export function TaskView({
 export function TaskMeta({ task }: { task: TaskContent }) {
   return (
     <span className="meta">
-      {task.grade}. klasse · {task.area} · {task.topic} · <DifficultyBadge d={task.difficulty} /> ·{' '}
+      {levelLabel(task)} · {task.area} · {task.topic} · <DifficultyBadge d={task.difficulty} /> ·{' '}
       <span className="num">{taskPoints(task)} point</span>
     </span>
   )
@@ -227,10 +227,16 @@ export function TaskEditor<T extends TaskContent>({
       </Field>
       <div className="row4">
         <Field label="Klassetrin">
-          <select value={draft.grade} onChange={(e) => set({ grade: Number(e.target.value) })}>
-            {GRADES.map((g) => (
-              <option key={g} value={g}>
-                {g}. klasse
+          <select
+            value={levelKey(draft)}
+            onChange={(e) => {
+              const l = levelOf(e.target.value)
+              set({ grade: l.grade, niveau: l.niveau })
+            }}
+          >
+            {LEVELS.map((l) => (
+              <option key={l.key} value={l.key}>
+                {l.label}
               </option>
             ))}
           </select>

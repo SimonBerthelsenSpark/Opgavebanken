@@ -1,39 +1,42 @@
 import { AREAS, type PlanItem } from '../../../src/shared/domain'
+import { LEVELS, levelKey, levelLabel, type Niveau } from '../../../src/shared/levels'
 import { topicCatalogText } from '../../../src/shared/progression'
 
 export function planPrompt(args: {
   grade: number
+  niveau?: Niveau | null
   topic: string
   count: number
   difficulty: string
   progression: string
 }): { system: string; user: string } {
-  const system = `Du er en erfaren dansk matematiklærer og opgaveforfatter i folkeskolen. Du planlægger et sæt opgaver, før de skrives. Alt skal være på dansk.
+  const system = `Du er en erfaren dansk matematiklærer og opgaveforfatter i folkeskolen og gymnasiet (stx). Du planlægger et sæt opgaver, før de skrives. Alt skal være på dansk.
 
 1) Vurdér om emnet passer til det valgte klassetrin ud fra progressionen nedenfor.
 - "passer": emnet hører hjemme på klassetrinnet eller tæt på (et trin over eller under er fint).
 - "for_svaert": emnet ligger tydeligt over niveauet (fx Pythagoras i 3. klasse).
 - "for_let": emnet ligger tydeligt under niveauet (fx tal til 20 i 8. klasse).
 - "uklart": emnet er ikke matematik eller kan ikke forstås.
-Skriv en kort forklaring (1–2 sætninger, henvend dig til læreren med "du"). Ved "passer" må forklaringen være tom. Foreslå klassetrin, hvor emnet passer bedre (tom liste ved "passer").
+Skriv en kort forklaring (1–2 sætninger, henvend dig til læreren med "du"). Ved "passer" må forklaringen være tom. Foreslå niveauer, hvor emnet passer bedre, som nøgler i "suggestedLevels" (tom liste ved "passer"). Nøgler: ${LEVELS.map((l) => `"${l.key}" = ${l.label}`).join(', ')}. Foreslå gymnasieniveauer, når emnet hører til i gymnasiet.
 
 2) Lav præcis det ønskede antal opgaveidéer om netop det emne – også selvom emnet ikke passer, så læreren selv kan vælge.
 - Variér spørgsmålstype og løsningsmetode, ikke kun tallene. Brug fx: beregn direkte; find en ukendt størrelse baglæns; sammenlign to løsninger eller figurer; sammensat figur; hverdagssituation/modellering; find og forklar fejlen i en elevs løsning; ræsonnement ("forklar hvorfor"); åben opgave med flere mulige svar; tegn/konstruér med givne mål.
 - "angle" beskriver konkret, hvad opgaven går ud på, og hvordan den adskiller sig fra de andre (1–2 sætninger).
 - Sværhedsgrad vurderes relativt til klassetrinnet. Er en bestemt sværhedsgrad valgt, får alle idéer den. Ved "Blandet" fordeles idéerne nogenlunde ligeligt på Let, Middel og Svær, sorteret fra let til svær.
-- "area" er ét af: ${AREAS.join(', ')}.
+- "area" er ét af: ${AREAS.join(', ')}. "Funktioner og infinitesimalregning" bruges kun i gymnasiet.
+- I gymnasiet skal niveauet (A, B eller C) styre sværhed, notation og krav til argumentation, som i studentereksamens opgaver. Angiv, om opgaven er med eller uden hjælpemidler, når det er relevant.
 - "topic" er et kort emne på 1–3 ord med stort begyndelsesbogstav. Brug så vidt muligt præcis et af emnerne i emnekataloget for klassetrinnet, så lærerens filtre virker.
 - Starter emnet med "Blandet", skal idéerne fordeles på flere forskellige emner fra kataloget (ved "hele pensum" også på flere områder), og emnet vurderes altid som "passer".
 - "needsFigure" er true, når opgaven skal have en tegnet figur med mål (fx de fleste areal- og omkredsopgaver i indskoling og mellemtrin).
 - Titler skal være korte og forskellige.`
 
-  const user = `Klassetrin: ${args.grade}. klasse
+  const user = `Klassetrin: ${levelLabel(args)}
 Emne (lærerens ord): ${args.topic}
 Antal opgaver: ${args.count}
 Sværhedsgrad: ${args.difficulty}
 
-Emnekatalog for ${args.grade}. klasse:
-${topicCatalogText(args.grade)}
+Emnekatalog for ${levelLabel(args)}:
+${topicCatalogText(levelKey(args))}
 
 Progression (lærerens vejledende placering og de officielle mål for trinforløbet):
 ${args.progression}`
@@ -60,12 +63,13 @@ export const TASK_RULES = `Regler for hver opgave:
 
 export function tasksPrompt(args: {
   grade: number
+  niveau?: Niveau | null
   topic: string
   items: PlanItem[]
   siblings: string[]
   progression: string
 }): { system: string; user: string } {
-  const system = `Du er en erfaren dansk matematiklærer og opgaveforfatter i folkeskolen. Du skriver færdige opgaver ud fra en plan. Lav præcis én opgave pr. idé, i samme rækkefølge.
+  const system = `Du er en erfaren dansk matematiklærer og opgaveforfatter i folkeskolen og gymnasiet (stx). Du skriver færdige opgaver ud fra en plan. Lav præcis én opgave pr. idé, i samme rækkefølge.
 
 ${TASK_RULES}`
   const ideas = args.items
@@ -74,7 +78,7 @@ ${TASK_RULES}`
         `${i + 1}. ${it.title} – ${it.angle} (Sværhedsgrad: ${it.difficulty}; område: ${it.area}; emne: ${it.topic}; figur: ${it.needsFigure ? 'ja' : 'nej'})`,
     )
     .join('\n')
-  const user = `Klassetrin: ${args.grade}. klasse
+  const user = `Klassetrin: ${levelLabel(args)}
 Lærerens emne: ${args.topic}
 
 Idéer, der skal skrives som opgaver (${args.items.length} stk.):

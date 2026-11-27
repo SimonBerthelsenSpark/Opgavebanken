@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { UsageStats } from '../../shared/admin'
-import { AREAS, GRADES } from '../../shared/domain'
+import { AREAS } from '../../shared/domain'
+import { LEVELS, levelKey } from '../../shared/levels'
 import { adminStats, ApiError } from '../api'
 import { type Profile, useLogins, useProfiles, useTasks } from '../store'
 
@@ -191,11 +192,11 @@ export function AdminPage({ uid }: { uid: string }) {
               </tr>
             </thead>
             <tbody>
-              {GRADES.map((g) => {
-                const of = (tasks ?? []).filter((t) => t.grade === g)
+              {LEVELS.map((l) => {
+                const of = (tasks ?? []).filter((t) => levelKey(t) === l.key)
                 return (
-                  <tr key={g}>
-                    <td>{g}. klasse</td>
+                  <tr key={l.key}>
+                    <td>{l.label}</td>
                     {AREAS.map((a) => (
                       <td key={a} className="r num">
                         {of.filter((t) => t.area === a).length || '·'}

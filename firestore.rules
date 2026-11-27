@@ -13,8 +13,8 @@ service cloud.firestore {
     function validTask(t) {
       return t.keys().hasAll(['title', 'intro', 'parts', 'grade', 'area', 'topic', 'difficulty'])
         && t.title is string && t.title.size() > 0 && t.title.size() <= 120
-        && t.grade is int && t.grade >= 1 && t.grade <= 9
-        && t.area in ['Tal og regnestrategier', 'Algebra', 'Geometri og måling', 'Statistik og sandsynlighed']
+        && t.grade is int && t.grade >= 1 && t.grade <= 12
+        && t.area in ['Tal og regnestrategier', 'Algebra', 'Geometri og måling', 'Statistik og sandsynlighed', 'Funktioner og infinitesimalregning']
         && t.difficulty in ['Let', 'Middel', 'Svær']
         && t.parts is list && t.parts.size() >= 1 && t.parts.size() <= 6;
     }

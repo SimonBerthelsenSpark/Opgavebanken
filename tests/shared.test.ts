@@ -155,3 +155,21 @@ describe('Firestore codec', async () => {
     expect(decodeTask(stored)).toEqual(t)
   })
 })
+
+describe('levels', async () => {
+  const { LEVELS, levelLabel, neighbours } = await import('../src/shared/levels')
+  const { progressionContext, DEFAULT_PROGRESSION } = await import('../src/shared/progression')
+  it('labels folkeskole and gymnasium levels', () => {
+    expect(levelLabel({ grade: 5 })).toBe('5. klasse')
+    expect(levelLabel({ grade: 11, niveau: 'B' })).toBe('2.g – Matematik B')
+    expect(levelLabel({ grade: 12, niveau: 'A' }, true)).toBe('3.g A')
+    expect(LEVELS.filter((l) => l.school === 'gymnasium')).toHaveLength(6)
+  })
+  it('gives context within the same niveau', () => {
+    expect(neighbours('11A').map((l) => l.key)).toEqual(['10A', '12A'])
+    const ctx = progressionContext(DEFAULT_PROGRESSION, '11B')
+    expect(ctx).toContain('2.g – Matematik B (valgt)')
+    expect(ctx).toContain('Matematik B (stx)')
+    expect(ctx).not.toContain('Matematik A')
+  })
+})

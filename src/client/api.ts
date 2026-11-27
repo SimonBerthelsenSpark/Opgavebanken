@@ -41,6 +41,7 @@ export const newRequestId = () => crypto.randomUUID()
 
 export function planTasks(args: {
   grade: number
+  niveau: import('../shared/levels').Niveau | null
   topic: string
   count: number
   difficulty: string
@@ -52,6 +53,7 @@ export function planTasks(args: {
 
 export function generateChunk(args: {
   grade: number
+  niveau: import('../shared/levels').Niveau | null
   topic: string
   items: PlanItem[]
   siblings: string[]

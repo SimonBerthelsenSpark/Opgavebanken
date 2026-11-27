@@ -40,8 +40,8 @@ export function mockPlan(messages: Msg[]) {
   }))
   return {
     fit: tooHard
-      ? { status: 'for_svaert', explanation: `Emnet hører typisk til i udskolingen og ligger over niveauet for ${grade}. klasse.`, suggestedGrades: [8] }
-      : { status: 'passer', explanation: '', suggestedGrades: [] },
+      ? { status: 'for_svaert', explanation: `Emnet hører typisk til i udskolingen og ligger over niveauet for ${grade}. klasse.`, suggestedLevels: ['8'] }
+      : { status: 'passer', explanation: '', suggestedLevels: [] },
     items,
   }
 }

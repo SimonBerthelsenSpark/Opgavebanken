@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type SavedSet, type Task, taskPoints } from '../../shared/domain'
+import { levelLabel } from '../../shared/levels'
 import { navigate } from '../App'
 import { TaskMeta, TaskView } from '../components'
 import { KEYS, type SetDraft, readSession, writeSession } from '../session'
@@ -7,8 +8,8 @@ import { loadSet, renameSet, saveSet, useTasks } from '../store'
 
 function suggestTitle(tasks: Task[]): string {
   const topics = [...new Set(tasks.map((t) => t.topic))].slice(0, 2).join(' og ')
-  const grades = [...new Set(tasks.map((t) => t.grade))].sort((a, b) => a - b)
-  return `${topics || 'Opgavesæt'} · ${grades.length === 1 ? `${grades[0]}. klasse` : `${grades[0]}.–${grades[grades.length - 1]}. klasse`}`
+  const levels = [...new Set(tasks.map((t) => levelLabel(t)))]
+  return `${topics || 'Opgavesæt'} · ${levels.length <= 2 ? levels.join(' og ') : 'flere niveauer'}`
 }
 
 /** Preview of a set before it is approved: title, order and removal. Same view for manual and random sets. */

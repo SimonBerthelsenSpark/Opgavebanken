@@ -2,12 +2,12 @@ import { useMemo, useRef, useState } from 'react'
 import {
   type Fit,
   type GeneratedTask,
-  GRADES,
   MAX_TASKS_PER_GENERATION,
   type PlanItem,
   TASKS_PER_CHUNK,
   taskPoints,
 } from '../../shared/domain'
+import { LEVELS, levelOf } from '../../shared/levels'
 import { GRADE_TOPICS, progressionContext, topicRequest } from '../../shared/progression'
 import { checkTask } from '../../shared/validate'
 import { ApiError, generateChunk, newRequestId, planTasks } from '../api'
@@ -25,14 +25,14 @@ interface Slot {
 }
 
 interface GenState {
-  form: { grade: number; topic: string; custom?: string; count: number; difficulty: string }
+  form: { level: string; grade?: number; topic: string; custom?: string; count: number; difficulty: string }
   fit: Fit | null
   slots: Slot[]
   notices: string[]
 }
 
 const INITIAL: GenState = {
-  form: { grade: 5, topic: 'mixed:all', custom: '', count: 12, difficulty: 'Blandet' },
+  form: { level: '5', topic: 'mixed:all', custom: '', count: 12, difficulty: 'Blandet' },
   fit: null,
   slots: [],
   notices: [],
@@ -53,12 +53,16 @@ export function GeneratePage({ uid }: { uid: string }) {
   const topics = useMemo(() => [...new Set((bank ?? []).map((t) => t.topic))], [bank])
   const { form } = state
   const setForm = (patch: Partial<GenState['form']>) => setState((s) => ({ ...s, form: { ...s.form, ...patch } }))
-  const context = progressionContext(progression, form.grade)
-  const catalog = GRADE_TOPICS[form.grade] ?? {}
-  const inCatalog = (g: number, t: string) => Object.values(GRADE_TOPICS[g] ?? {}).some((ts) => ts.includes(t))
-  const requestTopic = form.topic === 'custom' ? (form.custom ?? '').trim() : topicRequest(form.topic, form.grade)
+  // older sessions stored a grade number instead of a level key
+  const levelKeyNow = form.level ?? String(form.grade ?? 5)
+  const level = levelOf(levelKeyNow)
+  const context = progressionContext(progression, level.key)
+  const catalog = GRADE_TOPICS[level.key] ?? {}
+  const inCatalog = (k: string, t: string) => Object.values(GRADE_TOPICS[k] ?? {}).some((ts) => (ts ?? []).includes(t))
+  const requestTopic = form.topic === 'custom' ? (form.custom ?? '').trim() : topicRequest(form.topic, level.key)
 
-  async function writeTasks(items: PlanItem[], indexes: number[], grade: number, retry = true) {
+  async function writeTasks(items: PlanItem[], indexes: number[], key: string, retry = true) {
+    const { grade, niveau } = levelOf(key)
     setRunning(true)
     setPhase('idle')
     const chunks: number[][] = []
@@ -72,6 +76,7 @@ export function GeneratePage({ uid }: { uid: string }) {
         try {
           const res = await generateChunk({
             grade,
+            niveau,
             topic: requestTopic,
             items: idx.map((i) => items[i]),
             siblings: items.filter((_, i) => !idx.includes(i)).map((it) => it.title),
@@ -101,7 +106,7 @@ export function GeneratePage({ uid }: { uid: string }) {
       }),
     )
     if (retry && missing.length) {
-      await writeTasks(items, missing, grade, false)
+      await writeTasks(items, missing, key, false)
       return
     }
     setRunning(false)
@@ -114,14 +119,14 @@ export function GeneratePage({ uid }: { uid: string }) {
     setError(null)
     setPhase('planning')
     try {
-      const plan = await planTasks({ grade: form.grade, topic: requestTopic, count: form.count, difficulty: form.difficulty, progression: context, requestId: newRequestId() })
+      const plan = await planTasks({ grade: level.grade, niveau: level.niveau, topic: requestTopic, count: form.count, difficulty: form.difficulty, progression: context, requestId: newRequestId() })
       setState((s) => ({ ...s, fit: plan.fit, slots: [], notices: [] }))
       if (plan.fit.status !== 'passer') {
         setPendingPlan(plan)
         setPhase('confirm')
         return
       }
-      await begin(plan.items, form.grade)
+      await begin(plan.items, level.key)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Noget gik galt. Prøv igen.')
       setPhase('idle')
@@ -130,10 +135,10 @@ export function GeneratePage({ uid }: { uid: string }) {
     }
   }
 
-  async function begin(items: PlanItem[], grade: number) {
+  async function begin(items: PlanItem[], key: string) {
     setPendingPlan(null)
     setState((s) => ({ ...s, slots: items.map((item) => ({ item, task: null, keep: false })) }))
-    await writeTasks(items, items.map((_, i) => i), grade)
+    await writeTasks(items, items.map((_, i) => i), key)
   }
 
   async function retryFailed() {
@@ -145,7 +150,7 @@ export function GeneratePage({ uid }: { uid: string }) {
       await writeTasks(
         state.slots.map((s) => s.item),
         failed,
-        form.grade,
+        level.key,
       )
     } finally {
       busy.current = false
@@ -193,30 +198,41 @@ export function GeneratePage({ uid }: { uid: string }) {
         <label className="field">
           <span className="field-label">Klassetrin</span>
           <select
-            value={form.grade}
+            value={level.key}
             onChange={(e) => {
-              const g = Number(e.target.value)
-              // keep "Blandet" and custom topics; a catalogue topic that the new grade lacks falls back to mixed
-              const keep = form.topic.startsWith('mixed:') || form.topic === 'custom' || inCatalog(g, form.topic)
-              setForm({ grade: g, topic: keep ? form.topic : 'mixed:all' })
+              const k = e.target.value
+              // keep "Blandet" and custom topics; a catalogue topic that the new level lacks falls back to mixed
+              const keep =
+                form.topic === 'mixed:all' || form.topic === 'custom' || inCatalog(k, form.topic) || form.topic.slice(6) in (GRADE_TOPICS[k] ?? {})
+              setForm({ level: k, topic: keep ? form.topic : 'mixed:all' })
             }}
             disabled={working}
+            aria-label="Klassetrin"
           >
-            {GRADES.map((g) => (
-              <option key={g} value={g}>
-                {g}. klasse
-              </option>
-            ))}
+            <optgroup label="Folkeskolen">
+              {LEVELS.filter((l) => l.school === 'folkeskole').map((l) => (
+                <option key={l.key} value={l.key}>
+                  {l.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Gymnasiet (stx)">
+              {LEVELS.filter((l) => l.school === 'gymnasium').map((l) => (
+                <option key={l.key} value={l.key}>
+                  {l.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </label>
         <label className="field grow">
           <span className="field-label">Emne</span>
           <select value={form.topic} onChange={(e) => setForm({ topic: e.target.value })} disabled={working} aria-label="Emne">
-            <option value="mixed:all">Blandet – hele {form.grade}. klasses pensum</option>
+            <option value="mixed:all">Blandet – hele pensum for {level.label}</option>
             {Object.entries(catalog).map(([area, list]) => (
               <optgroup key={area} label={area}>
                 <option value={`mixed:${area}`}>Blandet – {area}</option>
-                {list.map((t) => (
+                {(list ?? []).map((t) => (
                   <option key={t} value={t}>
                     {t}
                   </option>
@@ -286,23 +302,23 @@ export function GeneratePage({ uid }: { uid: string }) {
           <p>
             <strong>
               Emnet ser ud til at ligge {pendingPlan.fit.status === 'for_svaert' ? 'over' : pendingPlan.fit.status === 'for_let' ? 'under' : 'uden for'} niveauet
-              for {form.grade}. klasse.
+              for {level.label}.
             </strong>{' '}
             {pendingPlan.fit.explanation}
           </p>
           <div className="actions">
-            {pendingPlan.fit.suggestedGrades.slice(0, 3).map((g) => (
+            {pendingPlan.fit.suggestedLevels.slice(0, 3).map((g) => (
               <button
                 key={g}
                 type="button"
                 className="btn outline"
                 onClick={() => {
-                  setForm({ grade: g })
+                  setForm({ level: g })
                   setPendingPlan(null)
                   setPhase('idle')
                 }}
               >
-                Skift til {g}. klasse
+                Skift til {levelOf(g).label}
               </button>
             ))}
             <button
@@ -312,13 +328,13 @@ export function GeneratePage({ uid }: { uid: string }) {
                 if (busy.current) return
                 busy.current = true
                 try {
-                  await begin(pendingPlan.items, form.grade)
+                  await begin(pendingPlan.items, level.key)
                 } finally {
                   busy.current = false
                 }
               }}
             >
-              Fortsæt med {form.grade}. klasse
+              Fortsæt med {level.label}
             </button>
             <button
               type="button"

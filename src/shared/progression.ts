@@ -1,4 +1,5 @@
 import type { Area } from './domain'
+import { levelOf, neighbours } from './levels'
 
 /**
  * Two different things, kept apart on purpose:
@@ -26,6 +27,11 @@ export const SOURCES: Source[] = [
     note: 'Vejledende beskrivelse af indholdet i de tre trinforløb.',
   },
   {
+    title: 'Læreplaner for matematik A, B og C – stx, august 2024 (uvm.dk)',
+    url: 'https://uvm.dk/-/media/filer/uvm/gym-laereplaner-2017/stx/240613-matematik-b---stx--august-2024.pdf',
+    note: 'Gymnasiets niveauer. Linket er B-niveau; A og C ligger samme sted. Vejledningerne blev opdateret i november 2025.',
+  },
+  {
     title: 'Fagplan for matematik, andet udkast juni 2026 (uvm.dk)',
     url: 'https://uvm.dk/media/115b23fj/260624-fagplan-for-matematik-juni-2026.pdf',
     note: 'Udkast, der afprøves i efteråret 2026 og efter planen træder i kraft i skoleåret 2027/2028. Appens fire områder følger udkastets kerneidéer.',
@@ -34,15 +40,16 @@ export const SOURCES: Source[] = [
 
 export interface Stage {
   name: string
-  grades: number[]
-  goals: Record<Area, string[]>
+  /** Level keys (levels.ts) the stage covers. */
+  grades: string[]
+  goals: Partial<Record<Area, string[]>>
 }
 
-/** Paraphrased from the fagplan draft (June 2026); see SOURCES. */
+/** Folkeskole: paraphrased from the fagplan draft (June 2026). Gymnasium: from the stx læreplaner (2024). See SOURCES. */
 export const OFFICIAL_GOALS: Stage[] = [
   {
     name: '1.–3. klassetrin',
-    grades: [1, 2, 3],
+    grades: ['1', '2', '3'],
     goals: {
       'Tal og regnestrategier': [
         'Naturlige tal til antal, rækkefølge og størrelse; titalssystemet.',
@@ -64,7 +71,7 @@ export const OFFICIAL_GOALS: Stage[] = [
   },
   {
     name: '4.–6. klassetrin',
-    grades: [4, 5, 6],
+    grades: ['4', '5', '6'],
     goals: {
       'Tal og regnestrategier': [
         'Brøker som størrelse og del af en helhed; sammenhængen mellem brøk, decimaltal og procent.',
@@ -86,7 +93,7 @@ export const OFFICIAL_GOALS: Stage[] = [
   },
   {
     name: '7.–9. klassetrin',
-    grades: [7, 8, 9],
+    grades: ['7', '8', '9'],
     goals: {
       'Tal og regnestrategier': [
         'Reelle tal, forhold, kvadratrod, potens og primtal.',
@@ -106,9 +113,46 @@ export const OFFICIAL_GOALS: Stage[] = [
       ],
     },
   },
+  {
+    name: 'Matematik C (stx)',
+    grades: ['10C'],
+    goals: {
+      'Tal og regnestrategier': ['Tal- og bogstavregning, procent- og rentesregning.'],
+      Algebra: ['Ligninger og formler, herunder løsning med og uden hjælpemidler.'],
+      'Funktioner og infinitesimalregning': ['Lineære funktioner, eksponentielle funktioner og potensfunktioner; regression.'],
+      'Geometri og måling': ['Ensvinklede og retvinklede trekanter, trigonometri i retvinklede trekanter.'],
+      'Statistik og sandsynlighed': ['Deskriptiv statistik for ugrupperede og grupperede data.'],
+    },
+  },
+  {
+    name: 'Matematik B (stx)',
+    grades: ['10B', '11B'],
+    goals: {
+      Algebra: ['Polynomier, især andengradspolynomier; logaritmefunktioner.'],
+      'Funktioner og infinitesimalregning': [
+        'Differentialregning: differentialkvotient som væksthastighed, regneregler, monotoni og optimering.',
+      ],
+      'Geometri og måling': ['Trigonometri i vilkårlige trekanter (sinus- og cosinusrelationer).'],
+      'Statistik og sandsynlighed': [
+        'Sandsynlighedsregning, kombinatorik, stokastisk variabel og binomialfordelingen; deskriptiv statistik.',
+      ],
+    },
+  },
+  {
+    name: 'Matematik A (stx)',
+    grades: ['10A', '11A', '12A'],
+    goals: {
+      Algebra: ['Polynomier, logaritmer og ligningsløsning, også symbolsk.'],
+      'Funktioner og infinitesimalregning': [
+        'Differential- og integralregning, differentialligninger og funktioner af to variable.',
+      ],
+      'Geometri og måling': ['Vektorer i planen og rummet, analytisk geometri, trigonometri.'],
+      'Statistik og sandsynlighed': ['Binomial- og normalfordeling, statistiske test og konfidensintervaller.'],
+    },
+  },
 ]
 
-export type Progression = Record<string, Record<Area, string>>
+export type Progression = Record<string, Partial<Record<Area, string>>>
 
 /** The app's own suggested placement per grade. Editable by the teacher. */
 export const DEFAULT_PROGRESSION: Progression = {
@@ -166,24 +210,64 @@ export const DEFAULT_PROGRESSION: Progression = {
     'Geometri og måling': 'Rumfang og overflade af kegle, pyramide og kugle, målestoksforhold, ligedannethed.',
     'Statistik og sandsynlighed': 'Stikprøver, sammenligning af fordelinger, sandsynlighedsmodeller.',
   },
+  '10C': {
+    'Tal og regnestrategier': 'Tal- og bogstavregning, procent, renters rente og indekstal.',
+    Algebra: 'Ligninger, formler og omformning.',
+    'Funktioner og infinitesimalregning': 'Lineære og eksponentielle funktioner, potensfunktioner, regression.',
+    'Geometri og måling': 'Ensvinklede trekanter, Pythagoras, sinus, cosinus og tangens i retvinklede trekanter.',
+    'Statistik og sandsynlighed': 'Deskriptiv statistik: kvartiler, boksplot, sumkurver.',
+  },
+  '10B': {
+    'Tal og regnestrategier': 'Tal- og bogstavregning, procent og renter.',
+    Algebra: 'Ligninger og formler, andengradsligninger.',
+    'Funktioner og infinitesimalregning': 'Lineære og eksponentielle funktioner, potensfunktioner, regression.',
+    'Geometri og måling': 'Trigonometri i retvinklede trekanter.',
+    'Statistik og sandsynlighed': 'Deskriptiv statistik.',
+  },
+  '11B': {
+    Algebra: 'Andengradspolynomier, logaritmer.',
+    'Funktioner og infinitesimalregning': 'Differentialregning, tangenter, monotoni og optimering.',
+    'Geometri og måling': 'Sinus- og cosinusrelationer i vilkårlige trekanter.',
+    'Statistik og sandsynlighed': 'Kombinatorik, sandsynlighed, binomialfordeling.',
+  },
+  '10A': {
+    'Tal og regnestrategier': 'Tal- og bogstavregning, procent og renter.',
+    Algebra: 'Ligninger, andengradsligninger, logaritmer.',
+    'Funktioner og infinitesimalregning': 'Lineære, eksponentielle og potensfunktioner, regression.',
+    'Geometri og måling': 'Trigonometri, vektorer i planen.',
+    'Statistik og sandsynlighed': 'Deskriptiv statistik.',
+  },
+  '11A': {
+    Algebra: 'Polynomier og logaritmer.',
+    'Funktioner og infinitesimalregning': 'Differentialregning, optimering, begyndende integralregning.',
+    'Geometri og måling': 'Vektorer i planen, cirklens ligning.',
+    'Statistik og sandsynlighed': 'Binomialfordeling, normalfordeling.',
+  },
+  '12A': {
+    'Funktioner og infinitesimalregning': 'Integralregning (arealer, rumfang), differentialligninger, funktioner af to variable.',
+    'Geometri og måling': 'Vektorer i rummet, linjer og planer.',
+    'Statistik og sandsynlighed': 'Hypotesetest (chi-i-anden), konfidensintervaller.',
+  },
 }
 
-export function stageFor(grade: number): Stage {
-  return OFFICIAL_GOALS.find((s) => s.grades.includes(grade)) ?? OFFICIAL_GOALS[0]
+export function stageFor(key: string): Stage {
+  return OFFICIAL_GOALS.find((s) => s.grades.includes(key)) ?? OFFICIAL_GOALS[0]
 }
 
-/** Text sent to the model as context for a grade. */
-export function progressionContext(p: Progression, grade: number): string {
+/** Text sent to the model for a level (folkeskole grade or gymnasium year + niveau). */
+export function progressionContext(p: Progression, key: string): string {
   const lines: string[] = []
-  for (const g of [grade - 1, grade, grade + 1]) {
-    const row = p[String(g)]
+  const current = levelOf(key)
+  const around = neighbours(key)
+  for (const l of [...around.filter((n) => n.grade < current.grade), current, ...around.filter((n) => n.grade > current.grade)]) {
+    const row = p[l.key] ?? DEFAULT_PROGRESSION[l.key]
     if (!row) continue
-    lines.push(`${g}. klasse${g === grade ? ' (valgt)' : ''}:`)
-    for (const [area, text] of Object.entries(row)) lines.push(`  - ${area}: ${text}`)
+    lines.push(`${l.label}${l.key === key ? ' (valgt)' : ''}:`)
+    for (const [area, text] of Object.entries(row)) if (text) lines.push(`  - ${area}: ${text}`)
   }
-  const stage = stageFor(grade)
-  lines.push(`Officielle mål for trinforløbet ${stage.name} (fagplan-udkast juni 2026):`)
-  for (const [area, goals] of Object.entries(stage.goals)) lines.push(`  - ${area}: ${goals.join(' ')}`)
+  const stage = stageFor(key)
+  lines.push(`Officielle mål for ${stage.name}:`)
+  for (const [area, goals] of Object.entries(stage.goals)) lines.push(`  - ${area}: ${(goals ?? []).join(' ')}`)
   return lines.join('\n')
 }
 
@@ -191,7 +275,7 @@ export function progressionContext(p: Progression, grade: number): string {
  * Topics per grade for the "Emne" dropdown, grouped by area. The app's own suggested placement
  * (like DEFAULT_PROGRESSION), so generated tasks get consistent topic names that filter well.
  */
-export const GRADE_TOPICS: Record<number, Record<Area, string[]>> = {
+export const GRADE_TOPICS: Record<string, Partial<Record<Area, string[]>>> = {
   1: {
     'Tal og regnestrategier': ['Tal til 100', 'Plus og minus', 'Tælle og sammenligne', 'Penge'],
     Algebra: ['Talmønstre', 'Ukendte tal'],
@@ -246,18 +330,57 @@ export const GRADE_TOPICS: Record<number, Record<Area, string[]>> = {
     'Geometri og måling': ['Rumfang og overflade', 'Pythagoras', 'Målestoksforhold', 'Ligedannede figurer'],
     'Statistik og sandsynlighed': ['Statistik og stikprøver', 'Sandsynlighed'],
   },
+  '10C': {
+    'Tal og regnestrategier': ['Procent og renter', 'Indekstal'],
+    Algebra: ['Ligninger og formler'],
+    'Funktioner og infinitesimalregning': ['Lineære funktioner', 'Eksponentielle funktioner', 'Potensfunktioner', 'Regression'],
+    'Geometri og måling': ['Ensvinklede trekanter', 'Retvinklet trigonometri'],
+    'Statistik og sandsynlighed': ['Deskriptiv statistik'],
+  },
+  '10B': {
+    'Tal og regnestrategier': ['Procent og renter'],
+    Algebra: ['Ligninger og formler', 'Andengradsligninger'],
+    'Funktioner og infinitesimalregning': ['Lineære funktioner', 'Eksponentielle funktioner', 'Potensfunktioner', 'Regression'],
+    'Geometri og måling': ['Retvinklet trigonometri'],
+    'Statistik og sandsynlighed': ['Deskriptiv statistik'],
+  },
+  '11B': {
+    Algebra: ['Andengradspolynomier', 'Logaritmer'],
+    'Funktioner og infinitesimalregning': ['Differentialregning', 'Tangenter', 'Monotoni', 'Optimering'],
+    'Geometri og måling': ['Sinus- og cosinusrelationer'],
+    'Statistik og sandsynlighed': ['Kombinatorik', 'Sandsynlighed', 'Binomialfordeling'],
+  },
+  '10A': {
+    'Tal og regnestrategier': ['Procent og renter'],
+    Algebra: ['Ligninger', 'Andengradsligninger', 'Logaritmer'],
+    'Funktioner og infinitesimalregning': ['Lineære funktioner', 'Eksponentielle funktioner', 'Potensfunktioner', 'Regression'],
+    'Geometri og måling': ['Trigonometri', 'Vektorer i planen'],
+    'Statistik og sandsynlighed': ['Deskriptiv statistik'],
+  },
+  '11A': {
+    Algebra: ['Polynomier', 'Logaritmer'],
+    'Funktioner og infinitesimalregning': ['Differentialregning', 'Optimering', 'Integralregning'],
+    'Geometri og måling': ['Vektorer i planen', 'Cirklens ligning'],
+    'Statistik og sandsynlighed': ['Binomialfordeling', 'Normalfordeling'],
+  },
+  '12A': {
+    'Funktioner og infinitesimalregning': ['Integralregning', 'Differentialligninger', 'Funktioner af to variable'],
+    'Geometri og måling': ['Vektorer i rummet'],
+    'Statistik og sandsynlighed': ['Hypotesetest', 'Konfidensintervaller'],
+  },
 }
 
 export const MIXED_PREFIX = 'Blandet'
 
 /** The topic text sent to the model for a dropdown choice. */
-export function topicRequest(choice: string, grade: number): string {
-  if (choice === 'mixed:all') return `${MIXED_PREFIX}: emner fra hele ${grade}. klasses pensum`
-  if (choice.startsWith('mixed:')) return `${MIXED_PREFIX} inden for ${choice.slice(6)} (${grade}. klasse)`
+export function topicRequest(choice: string, key: string): string {
+  const label = levelOf(key).label
+  if (choice === 'mixed:all') return `${MIXED_PREFIX}: emner fra hele pensum for ${label}`
+  if (choice.startsWith('mixed:')) return `${MIXED_PREFIX} inden for ${choice.slice(6)} (${label})`
   return choice
 }
 
-export function topicCatalogText(grade: number): string {
-  const row = GRADE_TOPICS[grade]
+export function topicCatalogText(key: string): string {
+  const row = GRADE_TOPICS[key]
   return row ? Object.entries(row).map(([a, ts]) => `  - ${a}: ${ts.join(', ')}`).join('\n') : ''
 }

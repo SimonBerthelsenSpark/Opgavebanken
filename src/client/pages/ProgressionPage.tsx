@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
-import { AREAS, GRADES } from '../../shared/domain'
+import { AREAS } from '../../shared/domain'
+import { LEVELS, levelOf } from '../../shared/levels'
 import { OFFICIAL_GOALS, type Progression, SOURCES, stageFor } from '../../shared/progression'
 import { resetProgression, saveProgression, useProgression } from '../store'
 
 export function ProgressionPage({ uid }: { uid: string }) {
   const { progression, custom } = useProgression(uid)
-  const [grade, setGrade] = useState(5)
+  const [key, setKey] = useState('5')
+  const level = levelOf(key)
+  const areas = AREAS.filter((a) => level.school === 'gymnasium' || a !== 'Funktioner og infinitesimalregning')
   const [draft, setDraft] = useState<Progression>(progression)
   const [status, setStatus] = useState<string | null>(null)
   useEffect(() => setDraft(progression), [progression])
-  const stage = stageFor(grade)
+  const stage = stageFor(key)
   const dirty = JSON.stringify(draft) !== JSON.stringify(progression)
 
   return (
@@ -23,25 +26,25 @@ export function ProgressionPage({ uid }: { uid: string }) {
         enkelte klassetrin, som du selv kan rette.
       </p>
       <div className="tabs-inline" role="tablist" aria-label="Klassetrin">
-        {GRADES.map((g) => (
-          <button key={g} type="button" role="tab" aria-selected={g === grade} className={g === grade ? 'on' : ''} onClick={() => setGrade(g)}>
-            {g}. kl.
+        {LEVELS.map((l) => (
+          <button key={l.key} type="button" role="tab" aria-selected={l.key === key} className={l.key === key ? 'on' : ''} onClick={() => setKey(l.key)}>
+            {l.short}
           </button>
         ))}
       </div>
 
       <div className="two-col">
         <section className="panel">
-          <h2>Appens vejledende placering · {grade}. klasse</h2>
+          <h2>Appens vejledende placering · {level.label}</h2>
           <p className="hint">Din egen beskrivelse af, hvad der typisk arbejdes med på netop dette klassetrin. {custom ? 'Du har rettet progressionen.' : 'Standardforslag.'}</p>
-          {AREAS.map((area) => (
+          {areas.map((area) => (
             <label key={area} className="field">
               <span className="field-label">{area}</span>
               <textarea
                 rows={3}
-                value={draft[String(grade)]?.[area] ?? ''}
+                value={draft[key]?.[area] ?? ''}
                 onChange={(e) =>
-                  setDraft((d) => ({ ...d, [String(grade)]: { ...d[String(grade)], [area]: e.target.value } }))
+                  setDraft((d) => ({ ...d, [key]: { ...d[key], [area]: e.target.value } }))
                 }
               />
             </label>
@@ -79,16 +82,18 @@ export function ProgressionPage({ uid }: { uid: string }) {
         </section>
 
         <section className="panel">
-          <h2>Officielle mål · trinforløbet {stage.name}</h2>
+          <h2>Officielle mål · {stage.name}</h2>
           <p className="hint">
-            Gælder for hele trinforløbet, ikke for det enkelte klassetrin. Kort gengivet efter fagplan-udkastet (juni 2026). Kan ikke
-            redigeres.
+            {level.school === 'folkeskole'
+              ? 'Gælder for hele trinforløbet, ikke for det enkelte klassetrin. Kort gengivet efter fagplan-udkastet (juni 2026).'
+              : 'Kernestof for hele niveauet, ikke for det enkelte år. Kort gengivet efter læreplanerne for stx (2024).'}{' '}
+            Kan ikke redigeres.
           </p>
-          {AREAS.map((area) => (
+          {AREAS.filter((a) => stage.goals[a]).map((area) => (
             <div key={area} className="goal">
               <h3>{area}</h3>
               <ul>
-                {stage.goals[area].map((g) => (
+                {(stage.goals[area] ?? []).map((g) => (
                   <li key={g}>{g}</li>
                 ))}
               </ul>

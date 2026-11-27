@@ -24,6 +24,7 @@ export function evaluateOutput(raw: unknown, input: GenerateRequest): Evaluated 
     const candidate = {
       ...t,
       grade: input.grade,
+      niveau: input.niveau ?? null,
       topic: normalizeTopic(String(t.topic ?? item.topic)),
       figure: t.figure
         ? {

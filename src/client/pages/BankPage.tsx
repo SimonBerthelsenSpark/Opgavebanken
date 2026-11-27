@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { EMPTY_FILTERS, type Filters, filtersActive, matches, pickRandom } from '../../shared/bank'
-import { AREAS, DIFFICULTIES, GRADES, type Task, taskPoints } from '../../shared/domain'
+import { AREAS, DIFFICULTIES, type Task, taskPoints } from '../../shared/domain'
+import { LEVELS, levelLabel } from '../../shared/levels'
 import { navigate } from '../App'
 import { DifficultyBadge, IssueList, TaskEditor, TaskView } from '../components'
 import { KEYS, type SetDraft, readSession, useSessionState, writeSession } from '../session'
@@ -83,9 +84,9 @@ export function BankPage({ uid, admin = false }: { uid: string; admin?: boolean 
           <span className="field-label">Klassetrin</span>
           <select value={filters.grade} onChange={(e) => f({ grade: e.target.value })}>
             <option value="">Alle</option>
-            {GRADES.map((g) => (
-              <option key={g} value={g}>
-                {g}. klasse
+            {LEVELS.map((l) => (
+              <option key={l.key} value={l.key}>
+                {l.label}
               </option>
             ))}
           </select>
@@ -302,7 +303,7 @@ function BankRow(props: {
           {t.editedByTeacher && <span className="badge quiet">Rettet</span>}
           {!props.mine && <span className="badge quiet">Kollega</span>}
         </td>
-        <td>{t.grade}. kl.</td>
+        <td>{levelLabel(t, true)}</td>
         <td>{t.area}</td>
         <td>{t.topic}</td>
         <td>

@@ -2,6 +2,7 @@ import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument, type PDFFont, type PDFPage, rgb } from 'pdf-lib'
 import { type SavedSet, type Task, partLabel, taskPoints } from './domain'
 import { layoutFigure } from './figure'
+import { levelLabel } from './levels'
 import { tokenizeMath } from './mathtext'
 
 /**
@@ -401,7 +402,7 @@ export async function teacherPdf(set: SavedSet, fonts: FontBytes): Promise<Uint8
     const intro = task.intro ? w.layout(task.intro, w.regular, 9.5, w.width) : []
     const fig = w.figure(task, w.width, 140, false)
     const head = `Opgave ${n}  ·  ${task.title}`
-    const meta = `${pts(taskPoints(task))} · ${task.grade}. kl. · ${task.topic} · ${task.difficulty}`
+    const meta = `${pts(taskPoints(task))} · ${levelLabel(task, true)} · ${task.topic} · ${task.difficulty}`
     w.ensure(bandHeight(w, head, meta, 9) + w.height(intro) + fig.h + 60)
     taskBand(w, head, meta, 9)
     if (intro.length) {

@@ -1,8 +1,9 @@
 import type { TaskContent } from './domain'
+import { levelKey } from './levels'
 import { plainMath } from './mathtext'
 
 export interface Filters {
-  grade: string // '' = all
+  grade: string // level key (levels.ts), '' = all
   area: string
   topic: string
   difficulty: string
@@ -16,7 +17,7 @@ export const filtersActive = (f: Filters) => Object.values(f).some((v) => v !== 
 const fold = (s: string) => s.toLocaleLowerCase('da').normalize('NFC')
 
 export function matches(t: TaskContent, f: Filters): boolean {
-  if (f.grade && String(t.grade) !== f.grade) return false
+  if (f.grade && levelKey(t) !== f.grade) return false
   if (f.area && t.area !== f.area) return false
   if (f.topic && fold(t.topic) !== fold(f.topic)) return false
   if (f.difficulty && t.difficulty !== f.difficulty) return false

@@ -1,4 +1,5 @@
 import { AREAS, DIFFICULTIES } from '../../../src/shared/domain'
+import { LEVEL_KEYS } from '../../../src/shared/levels'
 
 /** JSON Schemas for OpenAI Structured Outputs (strict mode: every key required, no extra keys). */
 
@@ -18,7 +19,7 @@ export const planJsonSchema = obj({
   fit: obj({
     status: { type: 'string', enum: ['passer', 'for_svaert', 'for_let', 'uklart'] },
     explanation: str,
-    suggestedGrades: arr(int),
+    suggestedLevels: arr({ type: 'string', enum: LEVEL_KEYS }),
   }),
   items: arr(
     obj({

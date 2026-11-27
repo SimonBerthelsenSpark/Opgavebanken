@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LEVEL_KEYS } from './levels'
 
 /** The fixed list of mathematical areas. Follows the core-idea areas in the national fagplan for matematik. */
 export const AREAS = [
@@ -6,6 +7,7 @@ export const AREAS = [
   'Algebra',
   'Geometri og måling',
   'Statistik og sandsynlighed',
+  'Funktioner og infinitesimalregning',
 ] as const
 export type Area = (typeof AREAS)[number]
 
@@ -13,6 +15,7 @@ export const DIFFICULTIES = ['Let', 'Middel', 'Svær'] as const
 export type Difficulty = (typeof DIFFICULTIES)[number]
 
 export const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const
+export const niveauSchema = z.enum(['A', 'B', 'C']).nullable().optional()
 
 /** Hard limit on tasks per generation (cost and time). */
 export const MAX_TASKS_PER_GENERATION = 20
@@ -64,7 +67,8 @@ export const taskContentSchema = z.object({
   intro: z.string().trim().max(2000),
   figure: figureSchema.nullable(),
   parts: z.array(partSchema).min(1).max(6),
-  grade: z.number().int().min(1).max(9),
+  grade: z.number().int().min(1).max(12),
+  niveau: niveauSchema,
   area: z.enum(AREAS),
   topic: z.string().trim().min(1).max(60),
   difficulty: z.enum(DIFFICULTIES),
@@ -120,7 +124,8 @@ export function normalizeTopic(topic: string): string {
 }
 
 export const planRequestSchema = z.object({
-  grade: z.number().int().min(1).max(9),
+  grade: z.number().int().min(1).max(12),
+  niveau: niveauSchema,
   topic: z.string().trim().min(2).max(120),
   count: z.number().int().min(1).max(MAX_TASKS_PER_GENERATION),
   difficulty: z.enum(['Let', 'Middel', 'Svær', 'Blandet']),
@@ -143,7 +148,8 @@ export type PlanItem = z.infer<typeof planItemSchema>
 export const fitSchema = z.object({
   status: z.enum(['passer', 'for_svaert', 'for_let', 'uklart']),
   explanation: z.string().max(600),
-  suggestedGrades: z.array(z.number().int().min(1).max(9)).max(9),
+  /** Level keys (see levels.ts), e.g. "8" or "11B". */
+  suggestedLevels: z.array(z.enum(LEVEL_KEYS as [string, ...string[]])).max(9),
 })
 export type Fit = z.infer<typeof fitSchema>
 
@@ -154,7 +160,8 @@ export const planResponseSchema = z.object({
 export type PlanResponse = z.infer<typeof planResponseSchema>
 
 export const generateRequestSchema = z.object({
-  grade: z.number().int().min(1).max(9),
+  grade: z.number().int().min(1).max(12),
+  niveau: niveauSchema,
   topic: z.string().trim().min(2).max(120),
   items: z.array(planItemSchema).min(1).max(TASKS_PER_CHUNK),
   /** Titles of the other tasks in the same generation, so the chunk avoids repeating them. */
