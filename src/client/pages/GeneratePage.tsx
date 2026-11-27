@@ -7,6 +7,7 @@ import {
   TASKS_PER_CHUNK,
   taskPoints,
 } from '../../shared/domain'
+import { allocate, coverage } from '../../shared/bank'
 import { LEVELS, levelOf } from '../../shared/levels'
 import { GRADE_TOPICS, progressionContext, topicRequest } from '../../shared/progression'
 import { checkTask } from '../../shared/validate'
@@ -14,6 +15,7 @@ import { ApiError, generateChunk, newRequestId, planTasks } from '../api'
 import { navigate } from '../App'
 import { IssueList, TaskEditor, TaskMeta, TaskView } from '../components'
 import { createGenStore } from '../genStore'
+import { generateTasks } from '../generation'
 import { writeSession } from '../session'
 import { saveNewTasks, useProgression, useTasks } from '../store'
 
@@ -295,6 +297,35 @@ export function GeneratePage({ uid, preferred }: { uid: string; preferred?: stri
         </p>
       </form>
 
+      <GapFiller
+        bank={bank ?? []}
+        current={level.key}
+        disabled={working}
+        onStart={() => {
+          setPendingPlan(null)
+          setPhase('idle')
+          setError(null)
+          setRunning(true)
+          setState((s) => ({ ...s, fit: null, slots: [], notices: [] }))
+        }}
+        onTasks={(tasks) =>
+          setState((s) => ({
+            ...s,
+            slots: [
+              ...s.slots,
+              ...tasks.map((t) => ({
+                item: { title: t.title, angle: '', difficulty: t.difficulty, area: t.area, topic: t.topic, needsFigure: Boolean(t.figure) },
+                task: t,
+                keep: true,
+              })),
+            ],
+          }))
+        }
+        onNotice={(n) => setState((s) => ({ ...s, notices: [...s.notices, n] }))}
+        onDone={() => setRunning(false)}
+        progression={progression}
+      />
+
       {error && (
         <p className="notice attention" role="alert">
           {error}
@@ -462,5 +493,121 @@ export function GeneratePage({ uid, preferred }: { uid: string; preferred?: stri
         </section>
       )}
     </>
+  )
+}
+
+const UPPER = ['8', '9', '10C', '10B', '11B', '10A', '11A', '12A']
+
+/**
+ * "Lav det der mangler": finds the catalogue topics with the fewest tasks in the shared bank and
+ * generates new tasks for exactly those, spread over the levels in scope. The result lands in the
+ * normal preview, where the teacher checks and saves it.
+ */
+function GapFiller(props: {
+  bank: GeneratedTask[] | { grade: number; niveau?: string | null; topic: string }[]
+  current: string
+  disabled: boolean
+  progression: import('../../shared/progression').Progression
+  onStart: () => void
+  onTasks: (t: GeneratedTask[]) => void
+  onNotice: (n: string) => void
+  onDone: () => void
+}) {
+  const [scope, setScope] = useState<'upper' | 'current'>('upper')
+  const [total, setTotal] = useState(20)
+  const [status, setStatus] = useState<string | null>(null)
+  const levels = scope === 'upper' ? UPPER : [props.current]
+  const gaps = useMemo(() => coverage(props.bank as never, levels, GRADE_TOPICS), [props.bank, scope, props.current])
+  const plan = useMemo(() => allocate(gaps, total), [gaps, total])
+  const empty = gaps.filter((g) => g.count === 0).length
+
+  async function run() {
+    if (props.disabled) return
+    props.onStart()
+    let made = 0
+    let i = 0
+    try {
+      // at most 20 tasks per generation: split a level's topics into batches
+      const batches: [string, { topic: string; n: number }[]][] = []
+      for (const [lv, topics] of plan) {
+        let cur: { topic: string; n: number }[] = []
+        for (const t of topics) {
+          if (cur.reduce((s, x) => s + x.n, 0) + t.n > MAX_TASKS_PER_GENERATION) {
+            batches.push([lv, cur])
+            cur = []
+          }
+          cur.push(t)
+        }
+        if (cur.length) batches.push([lv, cur])
+      }
+      for (const [lv, topics] of batches) {
+        i++
+        const label = levelOf(lv).label
+        setStatus(`Fylder huller: ${label} (${i}/${batches.length}) …`)
+        const n = topics.reduce((sum, x) => sum + x.n, 0)
+        const topicText = `Udfyld huller i opgavebanken med netop disse emner (antal opgaver i parentes): ${topics.map((x) => `${x.topic} (${x.n})`).join(', ')}. Brug præcis disse emnenavne som "topic".`
+        try {
+          const tasks = await generateTasks({ levelKey: lv, topic: topicText, count: n, difficulty: 'Blandet', progression: props.progression })
+          made += tasks.length
+          props.onTasks(tasks)
+          if (tasks.length < n) props.onNotice(`${label}: ${n - tasks.length} af ${n} opgaver kunne ikke laves.`)
+        } catch (e) {
+          props.onNotice(`${label}: ${e instanceof ApiError ? e.message : 'fejlede'}`)
+        }
+      }
+    } finally {
+      setStatus(made ? `${made} nye opgaver er klar i forhåndsvisningen herunder. Gennemse dem, og gem dem i banken.` : null)
+      props.onDone()
+    }
+  }
+
+  return (
+    <section className="panel gap-filler" aria-label="Lav det der mangler">
+      <div className="downloads-head">
+        <h2>Lav det der mangler</h2>
+        <button type="button" className="btn primary" onClick={run} disabled={props.disabled || plan.size === 0}>
+          Lav {Math.min(total, [...plan.values()].flat().reduce((s, x) => s + x.n, 0))} opgaver, der mangler
+        </button>
+      </div>
+      <p className="hint">
+        Finder de emner i pensum, hvor den fælles bank har færrest opgaver, og laver nye til netop dem (højst 2 pr. emne ad gangen).
+        {empty > 0 && ` Lige nu har ${empty} emner ingen opgaver.`}
+      </p>
+      <div className="actions">
+        <span className="segmented" role="group" aria-label="Omfang">
+          <button type="button" aria-pressed={scope === 'upper'} onClick={() => setScope('upper')}>
+            8. klasse og opad
+          </button>
+          <button type="button" aria-pressed={scope === 'current'} onClick={() => setScope('current')}>
+            Kun {levelOf(props.current).label}
+          </button>
+        </span>
+        <label className="inline">
+          Antal
+          <select value={total} onChange={(e) => setTotal(Number(e.target.value))} aria-label="Antal opgaver, der mangler">
+            {[10, 20, 30, 40].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <details>
+        <summary>Se hvad der bliver lavet</summary>
+        <ul className="gap-plan">
+          {[...plan.entries()].map(([lv, topics]) => (
+            <li key={lv}>
+              <strong>{levelOf(lv).label}:</strong> {topics.map((x) => `${x.topic} (${x.n})`).join(', ')}
+            </li>
+          ))}
+        </ul>
+      </details>
+      {status && (
+        <p className="notice highlight" role="status">
+          {status}
+        </p>
+      )}
+    </section>
   )
 }

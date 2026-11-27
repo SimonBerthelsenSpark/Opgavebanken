@@ -65,3 +65,46 @@ export function pickForDuration<T extends TC & { verified?: boolean[]; usedCount
   picked.sort((a, b) => DIFFICULTIES.indexOf(a.difficulty) - DIFFICULTIES.indexOf(b.difficulty))
   return { picked, minutes }
 }
+
+export interface Gap {
+  level: string
+  area: string
+  topic: string
+  count: number
+}
+
+/** How many tasks the bank has for each catalogue topic on the given levels, fewest first. */
+export function coverage(
+  tasks: (TC & { niveau?: string | null })[],
+  levels: string[],
+  catalog: Record<string, Partial<Record<string, string[]>>>,
+): Gap[] {
+  const gaps: Gap[] = []
+  for (const level of levels)
+    for (const [area, topics] of Object.entries(catalog[level] ?? {}))
+      for (const topic of topics ?? []) {
+        const count = tasks.filter((t) => levelKey(t) === level && t.topic.toLocaleLowerCase('da') === topic.toLocaleLowerCase('da')).length
+        gaps.push({ level, area, topic, count })
+      }
+  return gaps.sort((a, b) => a.count - b.count)
+}
+
+/**
+ * Spreads `total` new tasks over the emptiest topics: one round at a time over the topics with the
+ * fewest tasks, at most `perTopic` per topic in one run. Returns topic → number per level.
+ */
+export function allocate(gaps: Gap[], total: number, perTopic = 2): Map<string, { topic: string; area: string; n: number }[]> {
+  const plan = new Map<string, { topic: string; area: string; n: number }[]>()
+  const counts = gaps.map((g) => ({ ...g, added: 0 }))
+  for (let left = total; left > 0; left--) {
+    const next = counts.filter((g) => g.added < perTopic).sort((a, b) => a.count + a.added - (b.count + b.added))[0]
+    if (!next) break
+    next.added++
+  }
+  for (const g of counts.filter((g) => g.added > 0)) {
+    const list = plan.get(g.level) ?? []
+    list.push({ topic: g.topic, area: g.area, n: g.added })
+    plan.set(g.level, list)
+  }
+  return plan
+}

@@ -151,7 +151,7 @@ export function normalizeTopic(topic: string): string {
 export const planRequestSchema = z.object({
   grade: z.number().int().min(1).max(12),
   niveau: niveauSchema,
-  topic: z.string().trim().min(2).max(120),
+  topic: z.string().trim().min(2).max(600),
   count: z.number().int().min(1).max(MAX_TASKS_PER_GENERATION),
   difficulty: z.enum(['Let', 'Middel', 'Svær', 'Blandet']),
   /** The teacher's own progression for the grade (editable in the app), sent as context. */
@@ -187,7 +187,7 @@ export type PlanResponse = z.infer<typeof planResponseSchema>
 export const generateRequestSchema = z.object({
   grade: z.number().int().min(1).max(12),
   niveau: niveauSchema,
-  topic: z.string().trim().min(2).max(120),
+  topic: z.string().trim().min(2).max(600),
   items: z.array(planItemSchema).min(1).max(TASKS_PER_CHUNK),
   /** Titles of the other tasks in the same generation, so the chunk avoids repeating them. */
   siblings: z.array(z.string().max(120)).max(MAX_TASKS_PER_GENERATION).default([]),

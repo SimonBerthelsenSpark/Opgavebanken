@@ -316,3 +316,6 @@ details summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); marg
 .star:hover { color: var(--saffron-ink); }
 .star.on { color: var(--saffron); }
 .downloads > .panel { margin-top: 12px; }
+
+.gap-filler { margin-top: 12px; }
+.gap-plan { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }

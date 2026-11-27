@@ -220,3 +220,19 @@ describe('gymnasium maths', async () => {
     expect(l.prims.filter((p) => p.k === 'text').length).toBeGreaterThan(10)
   })
 })
+
+describe('gap filling', async () => {
+  const { coverage, allocate } = await import('../src/shared/bank')
+  const { GRADE_TOPICS } = await import('../src/shared/progression')
+  it('finds empty topics and spreads new tasks over them', () => {
+    const bank = Array.from({ length: 5 }, () => ({ ...task(), grade: 8, topic: 'Pythagoras' }))
+    const gaps = coverage(bank as never, ['8', '9'], GRADE_TOPICS)
+    expect(gaps[0].count).toBe(0)
+    expect(gaps.find((g) => g.topic === 'Pythagoras' && g.level === '8')?.count).toBe(5)
+    const plan = allocate(gaps, 20)
+    const total = [...plan.values()].flat().reduce((s, x) => s + x.n, 0)
+    expect(total).toBe(20)
+    expect([...plan.values()].flat().some((x) => x.topic === 'Pythagoras')).toBe(false)
+    expect([...plan.values()].flat().every((x) => x.n <= 2)).toBe(true)
+  })
+})

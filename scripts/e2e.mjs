@@ -426,6 +426,18 @@ try {
   await shot('06-niveau')
   check('Emne uden for niveau forklares og kan justeres', (await bodyText()).includes('Skift til 8. klasse'))
 
+  // ---- fill the gaps from 8. klasse and up
+  await go('/generer')
+  await page.waitForSelector('.gap-filler')
+  await clickText('Lav 20 opgaver, der mangler')
+  await waitText('nye opgaver er klar i forhåndsvisningen', 60000)
+  const gapText = await bodyText()
+  const gapItems = await page.$$eval('.gen-item', (x) => x.length)
+  await shot('14-det-der-mangler')
+  check('“Lav det der mangler” laver 20 opgaver fordelt fra 8. klasse og op', gapItems === 20 && gapText.includes('8. klasse') && gapText.includes('3.g – Matematik A'), `${gapItems} opgaver`)
+  await clickText('Gem 20 i banken')
+  await waitText('20 opgaver er gemt i banken')
+
   // ---- leave the page while tasks are being written, come back later
   await go('/generer')
   await setSelect('Klassetrin', '5')
@@ -492,7 +504,7 @@ try {
   await shot('07-admin')
   check('Admin ser brugere med opgaver, sæt og logins', userRows >= 2 && /laerer\d+@skole\.dk/.test(adminText) && adminText.includes('AI-kald i dag'), `${userRows} brugere`)
   const teacherRow = await page.$$eval('table.bank tbody tr', (r) => r.map((x) => x.innerText).find((t) => /laerer\d+@skole\.dk/.test(t)) ?? '')
-  check('Brugerrækken tæller opgaver og sæt', /\t1\d\t/.test(teacherRow) && /\t[1-9]\t/.test(teacherRow), teacherRow.replace(/\t/g, ' | '))
+  check('Brugerrækken tæller opgaver og sæt', /\t[1-9]\d*\t/.test(teacherRow) && /\t[1-9]\t/.test(teacherRow), teacherRow.replace(/\t/g, ' | '))
   await clickText('Logins', 'button[role=tab]')
   await sleep(300)
   check('Login-log viser logins', (await page.$$eval('table.bank tbody tr', (r) => r.length)) >= 2)
