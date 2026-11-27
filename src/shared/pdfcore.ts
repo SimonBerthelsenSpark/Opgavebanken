@@ -1,6 +1,6 @@
 import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument, type PDFFont, type PDFPage, rgb } from 'pdf-lib'
-import { type SavedSet, type Task, partLabel, taskPoints } from './domain'
+import { estMinutes, type SavedSet, type Task, partLabel, taskPoints } from './domain'
 import { layoutFigure } from './figure'
 import { levelLabel } from './levels'
 import { tokenizeMath } from './mathtext'
@@ -373,7 +373,8 @@ export async function studentPdf(set: SavedSet, fonts: FontBytes): Promise<Uint8
     ['Klasse', 50],
     ['Dato', 90],
   ])
-  w.text(`Opgavesættet har ${set.tasks.length} opgaver og giver i alt ${pts(total)}.`, M, { size: 10, color: SOFT })
+  const mins = set.tasks.reduce((m, t) => m + estMinutes(t), 0)
+  w.text(`Opgavesættet har ${set.tasks.length} opgaver og giver i alt ${pts(total)}. Forventet tid: ca. ${mins} minutter.`, M, { size: 10, color: SOFT })
   w.y -= 16
   w.hline(w.y)
   w.y -= 14

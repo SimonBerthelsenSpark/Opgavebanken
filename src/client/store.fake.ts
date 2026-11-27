@@ -47,14 +47,17 @@ export function useTasks(_uid: string) {
   return { tasks, error: null as string | null }
 }
 
-export async function saveNewTasks(_uid: string, items: (TaskContent & { editedByTeacher?: boolean })[]) {
+export async function saveNewTasks(_uid: string, items: (TaskContent & { editedByTeacher?: boolean; source?: Task['source']; variantOf?: string })[]) {
   const now = Date.now()
+  const ids: string[] = []
   items.forEach((t, i) => {
     const { issues, verified } = checkTask(t)
     const key = id()
-    db.tasks.set(key, write({ ...encodeTask(t as Task), ownerUid: _uid, id: key, issues, verified, source: 'ai', editedByTeacher: Boolean(t.editedByTeacher), createdAt: now + (items.length - i), updatedAt: now }))
+    ids.push(key)
+    db.tasks.set(key, write({ ...encodeTask(t as Task), ownerUid: _uid, id: key, issues, verified, source: t.source ?? 'ai', editedByTeacher: Boolean(t.editedByTeacher), createdAt: now + (items.length - i), updatedAt: now }))
   })
   emit()
+  return ids
 }
 
 export async function updateTask(_uid: string, task: Task) {
@@ -72,6 +75,10 @@ export async function saveSet(_uid: string, title: string, tasks: Task[]) {
   const key = id()
   db.sets.set(key, write({ id: key, title, createdAt: Date.now(), tasks: tasks.map(encodeTask), totalPoints: tasks.reduce((s, t) => s + taskPoints(t), 0) }))
   bumpSets(_uid, 1)
+  for (const t of tasks) {
+    const stored = db.tasks.get(t.id)
+    if (stored) stored.usedCount = (stored.usedCount ?? 0) + 1
+  }
   emit()
   return key
 }
@@ -160,5 +167,14 @@ export function useReports() {
 export async function resolveReport(uid: string, rid: string) {
   const r = db.reports.find((x) => x.id === rid)
   if (r) Object.assign(r, { status: 'resolved', resolvedAt: Date.now(), resolvedBy: uid })
+  emit()
+}
+
+export function useMyProfile(uid: string) {
+  return useLive(() => (db.profiles.get(uid) ? clone(db.profiles.get(uid)) : null)) as never
+}
+
+export async function setPreferredLevel(uid: string, level: string) {
+  db.profiles.set(uid, { ...(db.profiles.get(uid) ?? {}), uid, preferredLevel: level, onboarded: true })
   emit()
 }

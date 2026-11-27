@@ -1,7 +1,9 @@
 import { onAuthStateChanged, sendEmailVerification, signOut, type User } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { auth, firebaseConfigured } from './firebase'
-import { migratePrivateTasks, recordLogin } from './store'
+import { migratePrivateTasks, recordLogin, useMyProfile } from './store'
+import { WelcomePage } from './pages/WelcomePage'
+import { levelOf } from '../shared/levels'
 import { isAdminEmail } from '../shared/admin'
 import { AdminPage } from './pages/AdminPage'
 import { BankPage } from './pages/BankPage'
@@ -61,14 +63,24 @@ export function App() {
   if (user === undefined) return <main className="page">Indlæser …</main>
   if (!user) return <LoginPage />
 
+  return <Shell user={user} path={path} />
+}
+
+function Shell({ user, path }: { user: User; path: string }) {
   const uid = user.uid
+  const profile = useMyProfile(uid)
+  const preferred = profile?.preferredLevel
   const admin = isAdminEmail(user.email, import.meta.env.MODE === 'e2e' || import.meta.env.VITE_USE_EMULATORS === '1')
   // everyone can see the admin overview; only admins can delete other teachers' tasks
   const tabs = [...TABS, { path: '/admin', label: 'Admin' }]
   let page: React.ReactNode
   let active = '/'
-  if (path === '/generer') {
-    page = <GeneratePage uid={uid} />
+  if (profile === undefined) {
+    page = <p className="muted">Indlæser …</p>
+  } else if (!profile?.onboarded || path === '/velkommen') {
+    page = <WelcomePage uid={uid} current={profile?.onboarded ? preferred : undefined} />
+  } else if (path === '/generer') {
+    page = <GeneratePage uid={uid} preferred={preferred} />
     active = '/generer'
   } else if (path === '/saet/ny') {
     page = <SetDraftPage uid={uid} />
@@ -84,7 +96,7 @@ export function App() {
   } else if (path === '/admin') {
     page = <AdminPage uid={uid} admin={admin} />
     active = '/admin'
-  } else page = <BankPage uid={uid} email={user.email} admin={admin} />
+  } else page = <BankPage uid={uid} email={user.email} admin={admin} preferred={preferred} />
 
   return (
     <>
@@ -116,6 +128,19 @@ export function App() {
             ))}
           </nav>
           <div className="user">
+            {preferred && (
+              <a
+                href="/velkommen"
+                className="btn ghost sm"
+                title="Skift dit niveau"
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigate('/velkommen')
+                }}
+              >
+                {levelOf(preferred).short}
+              </a>
+            )}
             <span className="muted small">{user.email}</span>
             <button type="button" className="btn ghost sm" onClick={() => signOut(auth)}>
               Log ud

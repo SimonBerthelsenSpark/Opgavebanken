@@ -7,6 +7,7 @@ import {
   type Issue,
   type Part,
   type TaskContent,
+  estMinutes,
   figureSchema,
   normalizeTopic,
   partLabel,
@@ -179,7 +180,7 @@ export function TaskMeta({ task }: { task: TaskContent }) {
   return (
     <span className="meta">
       {levelLabel(task)} · {task.area} · {task.topic} · <DifficultyBadge d={task.difficulty} /> ·{' '}
-      <span className="num">{taskPoints(task)} point</span>
+      <span className="num">{taskPoints(task)} point</span> · <span className="num">≈ {estMinutes(task)} min</span>
     </span>
   )
 }
@@ -414,5 +415,57 @@ export function TaskEditor<T extends TaskContent>({
         </button>
       </div>
     </form>
+  )
+}
+
+/** Only the marking guide of a task (for the side-by-side view). */
+export function GuideView({ task, number }: { task: TaskContent; number: number }) {
+  return (
+    <ol className="parts guide-only">
+      {task.parts.map((p, i) => (
+        <li key={i} className="part">
+          <div className="part-head">
+            <span className="part-label">{partLabel(number, i, task.parts.length)}</span>
+            <span className="part-q">
+              <strong>
+                <MathText text={p.answer} />
+              </strong>
+            </span>
+            <span className="muted num">{p.points} p</span>
+          </div>
+          <p className="small">
+            <MathText text={p.solution} />
+          </p>
+          <ul className="criteria small">
+            {p.criteria.map((c, j) => (
+              <li key={j}>
+                <span className="num">{c.points} p:</span> <MathText text={c.description} />
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/** Quality marks shown in the bank: verified answers, starter task, how often it has been used. */
+export function QualityBadges({ task }: { task: TaskContent & { verified?: boolean[]; usedCount?: number; source?: string } }) {
+  const checked = task.parts.some((p) => p.check.expression)
+  const allVerified = checked && (task.verified ?? []).length > 0 && task.parts.every((p, i) => !p.check.expression || task.verified?.[i])
+  return (
+    <>
+      {task.source === 'starter' && <span className="badge starter">AImforA</span>}
+      {allVerified && (
+        <span className="badge ok" title="Alle facit med tal er efterregnet med kode">
+          ✓ Efterregnet
+        </span>
+      )}
+      {(task.usedCount ?? 0) > 0 && (
+        <span className="badge quiet" title="Antal gemte opgavesæt, opgaven er brugt i">
+          Brugt i {task.usedCount} {task.usedCount === 1 ? 'sæt' : 'sæt'}
+        </span>
+      )}
+    </>
   )
 }

@@ -1,6 +1,7 @@
 import type { Config } from '@netlify/functions'
 import { type GeneratedTask, type GenerateRequest, generateRequestSchema } from '../../src/shared/domain'
 import { evaluateOutput } from './_lib/evaluate'
+import { isAdminEmail } from '../../src/shared/admin'
 import { requireUser } from './_lib/auth'
 import { bump, guard, usageKey } from './_lib/guard'
 import { handler, streamJson } from './_lib/http'
@@ -15,7 +16,7 @@ export default handler(async (req, body) => {
   const started = Date.now()
   const user = await requireUser(req)
   const input = generateRequestSchema.parse(body)
-  await guard(user.uid, `gen-${input.requestId}`)
+  await guard(user.uid, `gen-${input.requestId}`, { admin: isAdminEmail(user.email) })
   return streamJson(() => write(input, user.uid, started))
 })
 

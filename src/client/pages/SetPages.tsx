@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type SavedSet, type Task, taskPoints } from '../../shared/domain'
+import { estMinutes, type SavedSet, type Task, taskPoints } from '../../shared/domain'
 import { levelLabel } from '../../shared/levels'
 import { navigate } from '../App'
-import { TaskMeta, TaskView } from '../components'
+import { GuideView, TaskMeta, TaskView } from '../components'
+import { ApiError } from '../api'
+import { generateVariants } from '../generation'
 import { KEYS, type SetDraft, readSession, writeSession } from '../session'
-import { loadSet, renameSet, saveSet, useTasks } from '../store'
+import { loadSet, renameSet, saveNewTasks, saveSet, useProgression, useTasks } from '../store'
 
 function suggestTitle(tasks: Task[]): string {
   const topics = [...new Set(tasks.map((t) => t.topic))].slice(0, 2).join(' og ')
@@ -16,7 +18,7 @@ function suggestTitle(tasks: Task[]): string {
 export function SetDraftPage({ uid }: { uid: string }) {
   const { tasks } = useTasks(uid)
   const [draft, setDraft] = useState<SetDraft>(() => readSession<SetDraft>(KEYS.draft, { title: '', taskIds: [], origin: 'manual' }))
-  const [showGuide, setShowGuide] = useState(false)
+  const [view, setView] = useState<View>('student')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const busy = useRef(false)
@@ -77,19 +79,27 @@ export function SetDraftPage({ uid }: { uid: string }) {
         </button>
       </div>
       {draft.origin === 'random' && <p className="notice highlight">Opgaverne er trukket tilfældigt blandt dem, der matchede dine filtre.</p>}
+      {draft.note && <p className="notice highlight">{draft.note}</p>}
+      <Differentiate
+        uid={uid}
+        tasks={list}
+        title={title}
+        onDraft={(ids, label) =>
+          setDraft({ title: `${title} – ${label}`, taskIds: ids, origin: 'variant', titleTouched: true, note: `Ny ${label} af sættet. Opgaverne er lavet med AI og gemt i banken. Den oprindelige udgave kan du lave igen fra banken.` })
+        }
+      />
       <section className="panel set-head">
         <label className="field grow">
           <span className="field-label">Titel på sættet</span>
           <input value={title} onChange={(e) => setDraft((x) => ({ ...x, title: e.target.value, titleTouched: true }))} maxLength={120} />
         </label>
         <p className="summary">
-          <span className="num">{list.length}</span> opgaver · <span className="num">{total}</span> point i alt
+          <span className="num">{list.length}</span> opgaver · <span className="num">{total}</span> point i alt · ca.{' '}
+          <span className="num">{list.reduce((m, t) => m + estMinutes(t), 0)}</span> minutter
         </p>
       </section>
       <div className="toolbar">
-        <label className="inline">
-          <input type="checkbox" checked={showGuide} onChange={(e) => setShowGuide(e.target.checked)} /> Vis facit og rettevejledning
-        </label>
+        <ViewToggle view={view} onChange={setView} />
       </div>
       <ol className="set-list">
         {list.map((t, i) => (
@@ -117,7 +127,7 @@ export function SetDraftPage({ uid }: { uid: string }) {
               </span>
             </div>
             <TaskMeta task={t} />
-            <TaskView task={t} number={i + 1} showGuide={showGuide} verified={t.verified} />
+            <TaskBody task={t} number={i + 1} view={view} />
           </li>
         ))}
       </ol>
@@ -138,7 +148,7 @@ export function SetDraftPage({ uid }: { uid: string }) {
 
 export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
   const [set, setSet] = useState<SavedSet | null | undefined>(undefined)
-  const [showGuide, setShowGuide] = useState(false)
+  const [view, setView] = useState<View>('student')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState('')
@@ -221,9 +231,7 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
         </label>
       </section>
       <div className="toolbar">
-        <label className="inline">
-          <input type="checkbox" checked={showGuide} onChange={(e) => setShowGuide(e.target.checked)} /> Vis facit og rettevejledning
-        </label>
+        <ViewToggle view={view} onChange={setView} />
       </div>
       <ol className="set-list">
         {set.tasks.map((t, i) => (
@@ -232,10 +240,88 @@ export function SavedSetPage({ uid, id }: { uid: string; id: string }) {
               Opgave {i + 1}: {t.title} <span className="muted small num">({taskPoints(t)} point)</span>
             </h3>
             <TaskMeta task={t} />
-            <TaskView task={t} number={i + 1} showGuide={showGuide} verified={t.verified} />
+            <TaskBody task={t} number={i + 1} view={view} />
           </li>
         ))}
       </ol>
     </>
+  )
+}
+
+type View = 'student' | 'guide' | 'side'
+
+function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  return (
+    <span className="segmented" role="group" aria-label="Visning">
+      {(
+        [
+          ['student', 'Elevvisning'],
+          ['guide', 'Med facit'],
+          ['side', 'Side om side'],
+        ] as const
+      ).map(([v, label]) => (
+        <button key={v} type="button" aria-pressed={view === v} onClick={() => onChange(v)}>
+          {label}
+        </button>
+      ))}
+    </span>
+  )
+}
+
+function TaskBody({ task, number, view }: { task: Task; number: number; view: View }) {
+  if (view !== 'side') return <TaskView task={task} number={number} showGuide={view === 'guide'} verified={task.verified} />
+  return (
+    <div className="side-by-side">
+      <div>
+        <p className="field-label">Eleven ser</p>
+        <TaskView task={task} number={number} showGuide={false} />
+      </div>
+      <div>
+        <p className="field-label">Rettevejledning</p>
+        <GuideView task={task} number={number} />
+      </div>
+    </div>
+  )
+}
+
+/** An easier or harder version of the whole set (new variants, saved in the bank). */
+function Differentiate({ uid, tasks, title, onDraft }: { uid: string; tasks: Task[]; title: string; onDraft: (ids: string[], label: string) => void }) {
+  const { progression } = useProgression(uid)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const run = async (by: -1 | 1) => {
+    if (busy) return
+    setError(null)
+    setBusy(`Laver ${by < 0 ? 'lettere' : 'sværere'} udgave (0/${tasks.length}) …`)
+    try {
+      const variants = await generateVariants(tasks, by, progression, (d, n) =>
+        setBusy(`Laver ${by < 0 ? 'lettere' : 'sværere'} udgave (${d}/${n}) …`),
+      )
+      if (!variants.length) throw new Error()
+      const ids = await saveNewTasks(uid, variants)
+      onDraft(ids, by < 0 ? 'lettere udgave' : 'sværere udgave')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Udgaven kunne ikke laves. Prøv igen.')
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <div className="actions differentiate">
+      <span className="hint">Differentiering: lav samme sæt i en anden sværhedsgrad til elever, der har brug for det.</span>
+      <button type="button" className="btn outline sm" disabled={Boolean(busy) || !tasks.length} onClick={() => run(-1)}>
+        Lav lettere udgave
+      </button>
+      <button type="button" className="btn outline sm" disabled={Boolean(busy) || !tasks.length} onClick={() => run(1)}>
+        Lav sværere udgave
+      </button>
+      {busy && <span className="hint">{busy}</span>}
+      {error && (
+        <span className="error" role="alert">
+          {error}
+        </span>
+      )}
+      <span className="sr-only">{title}</span>
+    </div>
   )
 }

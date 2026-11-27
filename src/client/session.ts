@@ -40,6 +40,8 @@ export const KEYS = {
 export interface SetDraft {
   title: string
   taskIds: string[]
-  origin: 'manual' | 'random'
+  origin: 'manual' | 'random' | 'quick' | 'variant'
   titleTouched?: boolean
+  /** Shown above the preview, e.g. how a quick set was put together. */
+  note?: string
 }

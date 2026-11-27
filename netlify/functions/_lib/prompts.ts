@@ -66,7 +66,8 @@ export const TASK_RULES = `Regler for hver opgave:
     - Tegn aldrig selve svaret ind, hvis eleven skal finde det (fx ikke tangenten, når den skal bestemmes).
   - For alle former, der ikke bruger det: "expression" = "".
   - Alle mål, eleven skal bruge, skal stå på figuren eller i teksten. "caption" kan være tom.
-- Sæt "area", "topic" og "difficulty" som i idéen.`
+- Sæt "area", "topic" og "difficulty" som i idéen.
+- "minutes": dit skøn over, hvor mange minutter en typisk elev på niveauet bruger på hele opgaven (alle delspørgsmål).`
 
 export function tasksPrompt(args: {
   grade: number

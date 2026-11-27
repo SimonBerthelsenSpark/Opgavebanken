@@ -1,13 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { EMPTY_FILTERS, type Filters, filtersActive, matches, pickRandom } from '../../shared/bank'
-import { AREAS, DIFFICULTIES, type Task, taskPoints } from '../../shared/domain'
+import { AREAS, DIFFICULTIES, estMinutes, type Task, taskPoints } from '../../shared/domain'
 import { LEVELS, levelLabel } from '../../shared/levels'
 import { navigate } from '../App'
-import { DifficultyBadge, IssueList, TaskEditor, TaskView } from '../components'
+import { DifficultyBadge, IssueList, QualityBadges, TaskEditor, TaskView } from '../components'
+import { QuickSet } from '../QuickSet'
+import { VariantBox } from '../VariantBox'
 import { KEYS, type SetDraft, readSession, useSessionState, writeSession } from '../session'
 import { deleteTask, type Report, reportTask, resolveReport, updateTask, useReports, useTasks } from '../store'
 
-export function BankPage({ uid, email = null, admin = false }: { uid: string; email?: string | null; admin?: boolean }) {
+export function BankPage({
+  uid,
+  email = null,
+  admin = false,
+  preferred,
+}: { uid: string; email?: string | null; admin?: boolean; preferred?: string }) {
   const { tasks, error } = useTasks(uid)
   const reports = useReports()
   const openReports = useMemo(() => {
@@ -30,10 +37,20 @@ export function BankPage({ uid, email = null, admin = false }: { uid: string; em
   const all = tasks ?? []
   const byId = useMemo(() => new Map(all.map((t) => [t.id, t])), [all])
   const [onlyMine, setOnlyMine] = useSessionState<boolean>('ob.onlyMine', false)
-  const visible = useMemo(
-    () => all.filter((t) => matches(t, filters) && (!onlyMine || t.ownerUid === uid)),
-    [all, filters, onlyMine, uid],
-  )
+  const [sort, setSort] = useSessionState<'new' | 'used' | 'level'>('ob.sort', 'new')
+  const visible = useMemo(() => {
+    const list = all.filter((t) => matches(t, filters) && (!onlyMine || t.ownerUid === uid))
+    if (sort === 'used') return [...list].sort((a, b) => (b.usedCount ?? 0) - (a.usedCount ?? 0) || b.createdAt - a.createdAt)
+    if (sort === 'level') return [...list].sort((a, b) => a.grade - b.grade || (a.niveau ?? '').localeCompare(b.niveau ?? '') || a.topic.localeCompare(b.topic, 'da'))
+    return list
+  }, [all, filters, onlyMine, uid, sort])
+  // the first time per session, the bank opens on the teacher's own level
+  useEffect(() => {
+    if (preferred && !sessionStorage.getItem('ob.levelApplied')) {
+      sessionStorage.setItem('ob.levelApplied', '1')
+      if (!filtersActive(filters)) setFilters({ ...EMPTY_FILTERS, grade: preferred })
+    }
+  }, [preferred])
   const topics = useMemo(() => [...new Set(all.map((t) => t.topic))].sort((a, b) => a.localeCompare(b, 'da')), [all])
   // selections survive filter changes; tasks deleted elsewhere drop out
   const chosen = selected.map((id) => byId.get(id)).filter((t): t is Task => Boolean(t))
@@ -50,8 +67,8 @@ export function BankPage({ uid, email = null, admin = false }: { uid: string; em
         : [...s, ...visible.map((t) => t.id).filter((id) => !s.includes(id))],
     )
 
-  const openDraft = (ids: string[], origin: SetDraft['origin']) => {
-    writeSession(KEYS.draft, { title: '', taskIds: ids, origin } satisfies SetDraft)
+  const openDraft = (ids: string[], origin: SetDraft['origin'], title = '', note?: string) => {
+    writeSession(KEYS.draft, { title, taskIds: ids, origin, note, titleTouched: Boolean(title) } satisfies SetDraft)
     navigate('/saet/ny')
   }
 
@@ -84,6 +101,16 @@ export function BankPage({ uid, email = null, admin = false }: { uid: string; em
         </p>
       )}
       {error && <p className="notice attention">Kunne ikke hente opgaverne: {error}</p>}
+
+      {tasks !== null && (
+        <QuickSet
+          uid={uid}
+          tasks={all}
+          reported={new Set(openReports.keys())}
+          preferred={preferred}
+          onDraft={(ids, origin, title, note) => openDraft(ids, origin, title, note)}
+        />
+      )}
 
       <section className="panel filters" aria-label="Filtre">
         <label className="field">
@@ -127,6 +154,14 @@ export function BankPage({ uid, email = null, admin = false }: { uid: string; em
         <label className="field grow">
           <span className="field-label">Søg</span>
           <input type="search" placeholder="Søg i titel, tekst og facit" value={filters.q} onChange={(e) => f({ q: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="field-label">Sortér</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <option value="new">Nyeste først</option>
+            <option value="used">Mest brugt</option>
+            <option value="level">Klassetrin og emne</option>
+          </select>
         </label>
         <label className="inline mine">
           <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> Kun mine opgaver
@@ -228,6 +263,7 @@ export function BankPage({ uid, email = null, admin = false }: { uid: string; em
                 <th>Emne</th>
                 <th>Sværhedsgrad</th>
                 <th className="r">Point</th>
+                <th className="r">Tid</th>
                 <th>
                   <span className="sr-only">Vis</span>
                 </th>
@@ -236,7 +272,7 @@ export function BankPage({ uid, email = null, admin = false }: { uid: string; em
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="muted">
+                  <td colSpan={9} className="muted">
                     Ingen opgaver matcher filtrene.
                   </td>
                 </tr>
@@ -314,6 +350,7 @@ function BankRow(props: {
           {flagged && <span className="badge check">Tjek</span>}
           {t.editedByTeacher && <span className="badge quiet">Rettet</span>}
           {!props.mine && <span className="badge quiet">Kollega</span>}
+          <QualityBadges task={t} />
           {props.reports.length > 0 && (
             <span className="badge check" title={props.reports.map((r) => r.message).join('\n')}>
               Fejl meldt{props.reports.length > 1 ? ` (${props.reports.length})` : ''}
@@ -327,6 +364,7 @@ function BankRow(props: {
           <DifficultyBadge d={t.difficulty} />
         </td>
         <td className="r num">{taskPoints(t)}</td>
+        <td className="r num">{estMinutes(t)} min</td>
         <td>
           <button type="button" className="btn ghost xs" onClick={props.onOpen} aria-label={props.open ? 'Fold sammen' : 'Fold ud'}>
             {props.open ? '▴' : '▾'}
@@ -336,7 +374,7 @@ function BankRow(props: {
       {props.open && (
         <tr className="detail">
           <td />
-          <td colSpan={7}>
+          <td colSpan={8}>
             {props.editing ? (
               <TaskEditor task={t} topics={props.topics} onCancel={props.onCancel} onSave={props.onSave} />
             ) : (
@@ -344,6 +382,7 @@ function BankRow(props: {
                 <IssueList issues={t.issues ?? []} />
                 <ReportList reports={props.reports} canResolve={props.mine || props.admin} uid={props.uid} />
                 <TaskView task={t} showGuide verified={t.verified} />
+                <VariantBox uid={props.uid} task={t} />
                 <ReportForm onReport={props.onReport} />
                 {props.mine ? (
                   <div className="actions">

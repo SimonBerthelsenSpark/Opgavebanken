@@ -4,6 +4,7 @@ import { AREAS } from '../../shared/domain'
 import { LEVELS, levelKey } from '../../shared/levels'
 import { adminStats, ApiError } from '../api'
 import { TaskView } from '../components'
+import { StarterTool } from '../StarterTool'
 import { deleteTask, type Profile, resolveReport, useLogins, useProfiles, useReports, useTasks } from '../store'
 
 const DAY = 86_400_000
@@ -22,7 +23,7 @@ export function AdminPage({ uid, admin = false }: { uid: string; admin?: boolean
   const [showResolved, setShowResolved] = useState(false)
   const [openTask, setOpenTask] = useState<string | null>(null)
   const openCount = (reports ?? []).filter((r) => r.status === 'open').length
-  const [tab, setTab] = useState<'users' | 'logins' | 'bank' | 'reports'>('users')
+  const [tab, setTab] = useState<'users' | 'logins' | 'bank' | 'reports' | 'starter'>('users')
 
   useEffect(() => {
     adminStats()
@@ -87,6 +88,7 @@ export function AdminPage({ uid, admin = false }: { uid: string; admin?: boolean
             ['logins', 'Logins'],
             ['bank', 'Opgavebanken'],
             ['reports', `Fejlmeldinger${openCount ? ` (${openCount})` : ''}`],
+            ...(admin ? ([['starter', 'Startopgaver']] as const) : []),
           ] as const
         ).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
@@ -183,6 +185,8 @@ export function AdminPage({ uid, admin = false }: { uid: string; admin?: boolean
           <p className="muted small">De seneste 100 logins. Et login registreres én gang pr. browsersession.</p>
         </div>
       )}
+
+      {tab === 'starter' && admin && <StarterTool uid={uid} tasks={tasks ?? []} />}
 
       {tab === 'reports' && (
         <>

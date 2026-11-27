@@ -87,6 +87,8 @@ export const taskContentSchema = z.object({
   area: z.enum(AREAS),
   topic: z.string().trim().min(1).max(60),
   difficulty: z.enum(DIFFICULTIES),
+  /** The model's estimate of minutes a typical student needs. */
+  minutes: z.number().int().min(1).max(120).optional(),
 })
 
 export type Criterion = z.infer<typeof criterionSchema>
@@ -112,8 +114,13 @@ export interface Task extends TaskContent {
   issues: Issue[]
   /** Per part: whether the numeric check was recomputed and agreed. */
   verified: boolean[]
-  source: 'ai' | 'manual'
+  /** 'starter' = curated AImforA starter tasks. */
+  source: 'ai' | 'manual' | 'starter'
   editedByTeacher: boolean
+  /** How many saved sets (by any teacher) have used the task. */
+  usedCount?: number
+  /** Title of the task this one is a variant of. */
+  variantOf?: string
   createdAt: number
   updatedAt: number
 }
@@ -153,7 +160,7 @@ export type PlanRequest = z.infer<typeof planRequestSchema>
 
 export const planItemSchema = z.object({
   title: z.string().min(1).max(120),
-  angle: z.string().min(1).max(400),
+  angle: z.string().min(1).max(2500),
   difficulty: z.enum(DIFFICULTIES),
   area: z.enum(AREAS),
   topic: z.string().min(1).max(60),
@@ -190,4 +197,11 @@ export type GenerateRequest = z.infer<typeof generateRequestSchema>
 export interface GeneratedTask extends TaskContent {
   issues: Issue[]
   verified: boolean[]
+}
+
+/** Minutes a typical student needs: the model's estimate, otherwise a rule of thumb from points. */
+export function estMinutes(t: Pick<TaskContent, 'parts' | 'grade'> & { minutes?: number }): number {
+  if (t.minutes) return t.minutes
+  const perPoint = t.grade >= 10 ? 4 : t.grade >= 7 ? 3 : 2.5
+  return Math.max(2, Math.round(taskPoints(t) * perPoint))
 }

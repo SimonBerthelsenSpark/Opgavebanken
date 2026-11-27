@@ -42,7 +42,7 @@ export class GuardError extends Error {
  * Stops the same request from running twice (a double click, a retried fetch) and caps how many
  * AI calls one teacher can make per hour. The browser also locks the button while a call runs.
  */
-export async function guard(uid: string, requestId: string): Promise<void> {
+export async function guard(uid: string, requestId: string, opts: { admin?: boolean } = {}): Promise<void> {
   const store = kv()
   const reqKey = `req/${uid}/${requestId}`
   if (await store.get(reqKey)) throw new GuardError('Denne forespørgsel er allerede sendt.', 409)
@@ -52,7 +52,7 @@ export async function guard(uid: string, requestId: string): Promise<void> {
   const hour = new Date().toISOString().slice(0, 13)
   const rateKey = `rate/${uid}/${hour}`
   const used = Number((await store.get(rateKey)) ?? 0)
-  if (used >= limit)
+  if (used >= limit && !opts.admin)
     throw new GuardError('Du har brugt timens kvote for AI-generering. Prøv igen senere.', 429)
   await store.set(rateKey, String(used + 1))
 

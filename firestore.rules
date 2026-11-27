@@ -36,9 +36,12 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && validTask(request.resource.data);
       allow update: if request.auth != null
-        && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && validTask(request.resource.data);
+        && ((resource.data.ownerUid == request.auth.uid
+             && request.resource.data.ownerUid == resource.data.ownerUid
+             && validTask(request.resource.data))
+          // anyone may count one more use when a set with the task is saved
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedCount'])
+             && request.resource.data.usedCount == resource.data.get('usedCount', 0) + 1));
       allow delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
     }
 

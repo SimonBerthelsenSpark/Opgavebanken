@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   type Fit,
   type GeneratedTask,
@@ -25,7 +25,7 @@ interface Slot {
 }
 
 interface GenState {
-  form: { level: string; grade?: number; topic: string; custom?: string; count: number; difficulty: string }
+  form: { level: string; levelChosen?: boolean; grade?: number; topic: string; custom?: string; count: number; difficulty: string }
   fit: Fit | null
   slots: Slot[]
   notices: string[]
@@ -40,7 +40,7 @@ const INITIAL: GenState = {
 
 const useGen = createGenStore<GenState>(INITIAL)
 
-export function GeneratePage({ uid }: { uid: string }) {
+export function GeneratePage({ uid, preferred }: { uid: string; preferred?: string }) {
   const { state, setState, running, setRunning } = useGen()
   const { progression } = useProgression(uid)
   const { tasks: bank } = useTasks(uid)
@@ -52,6 +52,10 @@ export function GeneratePage({ uid }: { uid: string }) {
   const [countText, setCountText] = useState(() => String(state.form.count))
   const topics = useMemo(() => [...new Set((bank ?? []).map((t) => t.topic))], [bank])
   const { form } = state
+  // start on the teacher's own level until they pick another one here
+  useEffect(() => {
+    if (preferred && !form.levelChosen && !state.slots.length && form.level !== preferred) setForm({ level: preferred })
+  }, [preferred])
   const setForm = (patch: Partial<GenState['form']>) => setState((s) => ({ ...s, form: { ...s.form, ...patch } }))
   // older sessions stored a grade number instead of a level key
   const levelKeyNow = form.level ?? String(form.grade ?? 5)
@@ -204,7 +208,7 @@ export function GeneratePage({ uid }: { uid: string }) {
               // keep "Blandet" and custom topics; a catalogue topic that the new level lacks falls back to mixed
               const keep =
                 form.topic === 'mixed:all' || form.topic === 'custom' || inCatalog(k, form.topic) || form.topic.slice(6) in (GRADE_TOPICS[k] ?? {})
-              setForm({ level: k, topic: keep ? form.topic : 'mixed:all' })
+              setForm({ level: k, levelChosen: true, topic: keep ? form.topic : 'mixed:all' })
             }}
             disabled={working}
             aria-label="Klassetrin"

@@ -77,6 +77,7 @@ export const tasksJsonSchema = obj({
       area: { type: 'string', enum: [...AREAS] },
       topic: str,
       difficulty: { type: 'string', enum: [...DIFFICULTIES] },
+      minutes: int,
     }),
   ),
 })

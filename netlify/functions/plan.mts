@@ -1,5 +1,6 @@
 import type { Config } from '@netlify/functions'
 import { normalizeTopic, type PlanRequest, type PlanResponse, planRequestSchema, planResponseSchema } from '../../src/shared/domain'
+import { isAdminEmail } from '../../src/shared/admin'
 import { requireUser } from './_lib/auth'
 import { guard } from './_lib/guard'
 import { handler, streamJson } from './_lib/http'
@@ -11,7 +12,7 @@ import { planJsonSchema } from './_lib/schemas'
 export default handler(async (req, body) => {
   const user = await requireUser(req)
   const input = planRequestSchema.parse(body)
-  await guard(user.uid, `plan-${input.requestId}`)
+  await guard(user.uid, `plan-${input.requestId}`, { admin: isAdminEmail(user.email) })
   return streamJson(() => makePlan(input))
 })
 

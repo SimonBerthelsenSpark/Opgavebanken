@@ -47,14 +47,16 @@ export function useTasks(_uid: string) {
 
 export async function saveNewTasks(
   uid: string,
-  items: (TaskContent & { editedByTeacher?: boolean })[],
-): Promise<void> {
+  items: (TaskContent & { editedByTeacher?: boolean; source?: Task['source']; variantOf?: string })[],
+): Promise<string[]> {
   const batch = writeBatch(db)
+  const ids: string[] = []
   const now = Date.now()
   items.forEach((t, i) => {
     const { issues, verified } = checkTask(t)
     const ref = doc(tasksCol())
-    const { editedByTeacher, ...content } = t as TaskContent & { editedByTeacher?: boolean; id?: string }
+    ids.push(ref.id)
+    const { editedByTeacher, source, ...content } = t as TaskContent & { editedByTeacher?: boolean; id?: string; source?: Task['source'] }
     delete (content as { id?: string }).id
     batch.set(
       ref,
@@ -63,7 +65,7 @@ export async function saveNewTasks(
         ownerUid: uid,
         issues,
         verified,
-        source: 'ai',
+        source: source ?? 'ai',
         editedByTeacher: Boolean(editedByTeacher),
         createdAt: now + (items.length - i), // keep generation order in the newest-first list
         updatedAt: now,
@@ -71,6 +73,7 @@ export async function saveNewTasks(
     )
   })
   await batch.commit()
+  return ids
 }
 
 export async function updateTask(uid: string, task: Task): Promise<void> {
@@ -89,6 +92,10 @@ export async function saveSet(uid: string, title: string, tasks: Task[]): Promis
   )
   // the admin overview shows how many sets a teacher has, without reading the private sets
   await setDoc(profileDoc(uid), { setCount: increment(1) }, { merge: true }).catch(() => undefined)
+  // "brugt i N sæt" on each task in the shared bank (anyone may add exactly one)
+  await Promise.all(
+    [...new Set(tasks.map((t) => t.id))].map((id) => updateDoc(doc(tasksCol(), id), { usedCount: increment(1) }).catch(() => undefined)),
+  )
   return ref.id
 }
 
@@ -168,6 +175,8 @@ export interface Profile {
   lastLoginAt: number
   loginCount: number
   setCount?: number
+  preferredLevel?: string
+  onboarded?: boolean
 }
 
 export interface LoginEntry {
@@ -294,3 +303,13 @@ export function useReports() {
 export async function resolveReport(uid: string, id: string): Promise<void> {
   await updateDoc(doc(db, 'reports', id), { status: 'resolved', resolvedAt: Date.now(), resolvedBy: uid })
 }
+
+/** The signed-in teacher's own profile (preferred level etc.). */
+export function useMyProfile(uid: string) {
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined)
+  useEffect(() => onSnapshot(profileDoc(uid), (snap) => setProfile(snap.exists() ? (snap.data() as Profile) : null), () => setProfile(null)), [uid])
+  return profile
+}
+
+export const setPreferredLevel = (uid: string, level: string) =>
+  setDoc(profileDoc(uid), { uid, preferredLevel: level, onboarded: true }, { merge: true })

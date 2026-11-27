@@ -119,6 +119,7 @@ export function mockTasks(messages: Msg[]) {
       area,
       topic,
       difficulty,
+      minutes: 4 + (i % 3) * 2,
     }
   })
   return { tasks }
