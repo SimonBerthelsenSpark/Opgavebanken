@@ -397,9 +397,10 @@ try {
   await clickText('Sværere', 'button[aria-pressed]')
   await clickText('Lav variant med AI')
   await waitText('Gem varianten i banken', 30000)
+  const variantTitle = await page.$eval('.variant-preview h3', (h) => h.textContent)
   await clickText('Gem varianten i banken')
   await waitText('Varianten er gemt i banken')
-  check('“Lav variant” laver en sværere variant, der kan gemmes', (await bodyText()).includes('(svær)'))
+  check('“Lav variant” laver en sværere variant, der kan gemmes', variantTitle.includes('(svær)'), variantTitle)
 
   // ---- admin menu
   await clickText('Log ud')
